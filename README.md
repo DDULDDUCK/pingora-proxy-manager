@@ -39,7 +39,7 @@ Simple, Modern, and Fast.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com//pingora-proxy-manager.git
+   git clone https://github.com/dduldduck/pingora-proxy-manager.git
    cd pingora-proxy-manager
    ```
 
