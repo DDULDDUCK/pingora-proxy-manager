@@ -1,0 +1,26 @@
+[package]
+name = "backend"       
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pingora = { version = "0.6.0", features = ["lb"] }
+tokio = { version = "1", features = ["full"] }
+axum = "0.8.7"
+env_logger = "0.11"
+log = "0.4"
+async-trait = "0.1"
+arc-swap = "1.7.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tracing = "0.1.43"
+tracing-subscriber = "0.3.22"
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-native-tls", "sqlite"] }
+tower-http = { version = "0.6.7", features = ["cors", "fs", "trace"] }
+instant-acme = { version = "0.8.4", features = ["rcgen"] }
+rcgen = { version = "0.14.5", features = ["pem"] }
+x509-parser = "0.18.0"
+bytes = "1.11.0"
+bcrypt = "0.17.1"
+jsonwebtoken = { version = "10.2.0", features = ["pem", "use_pem", "rust_crypto"] }
+axum-extra = { version = "0.12.2", features = ["typed-header"] }

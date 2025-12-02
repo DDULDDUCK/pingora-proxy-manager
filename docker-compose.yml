@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    image: pingora-proxy-manager:latest
+    container_name: pingora-pm
+    restart: unless-stopped
+    ports:
+      - "80:8080"   # 외부 80 -> 내부 8080 (Proxy)
+      - "443:4443"  # 외부 443 -> 내부 4443 (Proxy - SSL 구현 시 포트 변경 필요)
+      - "81:81"     # 관리자 UI
+    volumes:
+      - ./data:/app/data        # DB 저장소
+      # - ./certs:/app/certs    # 인증서 저장소 (구현 예정)
+    environment:
+      - RUST_LOG=info
