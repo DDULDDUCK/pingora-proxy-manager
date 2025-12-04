@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RefreshCw, Plus, Trash2, User, Globe, Shield, X } from "lucide-react";
 import { useAccessLists, useAddAccessList, useDeleteAccessList, useAddClient, useRemoveClient, useAddIp, useRemoveIp } from "@/hooks/useAccessLists";
+import { useAuth } from "@/App";
 import type { AccessList } from "@/hooks/useAccessLists";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
 import { toast } from "sonner";
 
 export function AccessListsTab() {
+  const { canManageHosts } = useAuth();
   const { data: accessLists, isLoading, refetch } = useAccessLists();
   const addListMutation = useAddAccessList();
   const deleteListMutation = useDeleteAccessList();
@@ -113,6 +115,7 @@ export function AccessListsTab() {
                 <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
                   <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </Button>
+                {canManageHosts && (
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                   <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Add Access List</Button></DialogTrigger>
                   <DialogContent>
@@ -132,6 +135,7 @@ export function AccessListsTab() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                )}
               </div>
             </div>
        </CardHeader>
@@ -165,12 +169,16 @@ export function AccessListsTab() {
                         </div>
                     </TableCell>
                     <TableCell className="text-right">
-                        <Button variant="outline" size="sm" className="mr-2" onClick={() => openManage(list)}>
-                            Manage
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteList(list.id)}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
+                        {canManageHosts && (
+                          <Button variant="outline" size="sm" className="mr-2" onClick={() => openManage(list)}>
+                              Manage
+                          </Button>
+                        )}
+                        {canManageHosts && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteList(list.id)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        )}
                     </TableCell>
                  </TableRow>
                ))}

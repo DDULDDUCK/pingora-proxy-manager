@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, createContext, useContext } from "react";
 import { Toaster, toast } from "sonner";
-import { 
+import {
   Lock, LogOut, Loader2
 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -19,9 +20,29 @@ import { HostsTab } from "@/components/hosts/HostsTab";
 import { StreamsTab } from "@/components/streams/StreamsTab";
 import { LogsTab } from "@/components/dashboard/LogsTab";
 import { SettingsTab } from "@/components/dashboard/SettingsTab";
-import { AccessListsTab } from "@/components/access/AccessListsTab"; // Added
+import { AccessListsTab } from "@/components/access/AccessListsTab";
+import { UsersTab } from "@/components/users/UsersTab";
+import { AuditLogsTab } from "@/components/audit/AuditLogsTab";
+import { useCurrentUser, type User } from "@/hooks/useUsers";
 import { api } from "@/lib/api";
-import ppnIcon from '@/assets/ppnicon.png'; 
+import ppnIcon from '@/assets/ppnicon.png';
+
+// 권한 컨텍스트
+interface AuthContextType {
+  user: User | null | undefined;
+  isAdmin: boolean;
+  canManageHosts: boolean;
+  isLoading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  isAdmin: false,
+  canManageHosts: false,
+  isLoading: true,
+});
+
+export const useAuth = () => useContext(AuthContext);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -125,70 +146,108 @@ function App() {
 // --- Main Layout Component ---
 
 function MainLayout({ onLogout }: { onLogout: () => void }) {
+  const { data: user, isLoading: userLoading } = useCurrentUser();
+  
+  const isAdmin = user?.role === "admin";
+  const canManageHosts = user?.role === "admin" || user?.role === "operator";
+  
+  const roleColors: Record<string, string> = {
+    admin: "bg-red-100 text-red-700 border-red-200",
+    operator: "bg-blue-100 text-blue-700 border-blue-200",
+    viewer: "bg-gray-100 text-gray-700 border-gray-200",
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 md:p-10">
-      <Toaster position="top-right" />
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg">
-              <img src={ppnIcon} alt="App Icon" className="h-8 w-8" />
+    <AuthContext.Provider value={{ user, isAdmin, canManageHosts, isLoading: userLoading }}>
+      <div className="min-h-screen bg-slate-50/50 p-6 md:p-10">
+        <Toaster position="top-right" />
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg">
+                <img src={ppnIcon} alt="App Icon" className="h-8 w-8" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  Pingora Proxy Manager
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  High performance Rust-based proxy engine
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Pingora Proxy Manager
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                High performance Rust-based proxy engine
-              </p>
+            <div className="flex items-center gap-2">
+              {user && (
+                <div className="flex items-center gap-2 mr-2">
+                  <span className="text-sm text-slate-500 hidden md:inline">
+                    {user.username}
+                  </span>
+                  <Badge variant="outline" className={roleColors[user.role] || roleColors.viewer}>
+                    {user.role.toUpperCase()}
+                  </Badge>
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={onLogout}>
+                <LogOut className="mr-2 h-4 w-4" /> Logout
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500 mr-2 hidden md:inline">Logged in as admin</span>
-            <Button variant="outline" size="sm" onClick={onLogout}>
-              <LogOut className="mr-2 h-4 w-4" /> Logout
-            </Button>
-          </div>
+
+          {/* Tabs Navigation */}
+          <Tabs defaultValue="dashboard" className="space-y-4">
+            <TabsList className="flex flex-wrap">
+              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+              <TabsTrigger value="hosts">Hosts</TabsTrigger>
+              <TabsTrigger value="streams">Streams</TabsTrigger>
+              <TabsTrigger value="access">Access Lists</TabsTrigger>
+              {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
+              <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+              {canManageHosts && <TabsTrigger value="logs">Logs</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
+            </TabsList>
+            
+            <TabsContent value="dashboard" className="space-y-4">
+              <DashboardTab />
+            </TabsContent>
+            
+            <TabsContent value="hosts" className="space-y-4">
+              <HostsTab />
+            </TabsContent>
+
+            <TabsContent value="streams" className="space-y-4">
+              <StreamsTab />
+            </TabsContent>
+
+            <TabsContent value="access" className="space-y-4">
+              <AccessListsTab />
+            </TabsContent>
+
+            {isAdmin && (
+              <TabsContent value="users" className="space-y-4">
+                <UsersTab />
+              </TabsContent>
+            )}
+
+            <TabsContent value="audit" className="space-y-4">
+              <AuditLogsTab />
+            </TabsContent>
+
+            {canManageHosts && (
+              <TabsContent value="logs" className="space-y-4">
+                 <LogsTab />
+              </TabsContent>
+            )}
+
+            {isAdmin && (
+              <TabsContent value="settings" className="space-y-4">
+                 <SettingsTab />
+              </TabsContent>
+            )}
+          </Tabs>
         </div>
-
-        {/* Tabs Navigation */}
-        <Tabs defaultValue="dashboard" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="hosts">Hosts</TabsTrigger>
-            <TabsTrigger value="streams">Streams</TabsTrigger>
-            <TabsTrigger value="access">Access Lists</TabsTrigger>
-            <TabsTrigger value="logs">Logs</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="dashboard" className="space-y-4">
-            <DashboardTab />
-          </TabsContent>
-          
-          <TabsContent value="hosts" className="space-y-4">
-            <HostsTab />
-          </TabsContent>
-
-          <TabsContent value="streams" className="space-y-4">
-            <StreamsTab />
-          </TabsContent>
-
-          <TabsContent value="access" className="space-y-4">
-            <AccessListsTab />
-          </TabsContent>
-
-          <TabsContent value="logs" className="space-y-4">
-             <LogsTab />
-          </TabsContent>
-
-          <TabsContent value="settings" className="space-y-4">
-             <SettingsTab />
-          </TabsContent>
-        </Tabs>
       </div>
-    </div>
+    </AuthContext.Provider>
   );
 }
 

@@ -21,10 +21,56 @@ fn get_jwt_secret() -> Vec<u8> {
         .into_bytes()
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String, // username
-    pub exp: usize,  // 만료 시간
+    pub sub: String,      // username
+    pub exp: usize,       // 만료 시간
+    pub user_id: i64,     // 사용자 ID
+    pub role: String,     // 역할 (admin, operator, viewer)
+}
+
+// 역할 정의
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Role {
+    Viewer = 0,    // 읽기 전용
+    Operator = 1,  // 호스트/스트림 관리 가능
+    Admin = 2,     // 모든 권한 (사용자 관리 포함)
+}
+
+impl Role {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "admin" => Role::Admin,
+            "operator" => Role::Operator,
+            _ => Role::Viewer,
+        }
+    }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            Role::Admin => "admin",
+            Role::Operator => "operator",
+            Role::Viewer => "viewer",
+        }
+    }
+}
+
+impl Claims {
+    pub fn role(&self) -> Role {
+        Role::from_str(&self.role)
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.role() == Role::Admin
+    }
+
+    pub fn can_manage_hosts(&self) -> bool {
+        self.role() >= Role::Operator
+    }
+
+    pub fn can_manage_users(&self) -> bool {
+        self.role() == Role::Admin
+    }
 }
 
 #[derive(Debug)]
@@ -63,7 +109,7 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
 }
 
 // JWT 발급
-pub fn create_jwt(username: &str) -> Result<String, AuthError> {
+pub fn create_jwt(username: &str, user_id: i64, role: &str) -> Result<String, AuthError> {
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -73,6 +119,8 @@ pub fn create_jwt(username: &str) -> Result<String, AuthError> {
     let claims = Claims {
         sub: username.to_owned(),
         exp: expiration,
+        user_id,
+        role: role.to_owned(),
     };
 
     encode(
@@ -81,6 +129,11 @@ pub fn create_jwt(username: &str) -> Result<String, AuthError> {
         &EncodingKey::from_secret(&get_jwt_secret()),
     )
     .map_err(|_| AuthError::TokenCreation)
+}
+
+// 이전 버전 호환용 (기본 admin 권한)
+pub fn create_jwt_simple(username: &str) -> Result<String, AuthError> {
+    create_jwt(username, 0, "admin")
 }
 
 // JWT 검증 (Axum Extractor)

@@ -156,18 +156,53 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .execute(&pool)
     .await?;
 
-    // 사용자 테이블 생성 (로그인용)
+    // 사용자 테이블 생성 (로그인용) - role 추가
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'viewer',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            last_login INTEGER
         );
         "#,
     )
     .execute(&pool)
     .await?;
+
+    // 마이그레이션: role 컬럼 추가 (기존 DB 호환성)
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN last_login INTEGER").execute(&pool).await;
+
+    // 감사 로그(Audit Log) 테이블 생성
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            user_id INTEGER,
+            username TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id TEXT,
+            details TEXT,
+            ip_address TEXT
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    // 인덱스 추가 (조회 속도 향상)
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp);")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs (username);")
+        .execute(&pool)
+        .await;
 
     // 트래픽 통계 테이블 생성 (시계열)
     sqlx::query(
@@ -453,6 +488,16 @@ pub async fn get_expiring_certs(pool: &DbPool, threshold: i64) -> Result<Vec<Str
 
 // --- Users ---
 
+#[derive(sqlx::FromRow, Debug, Clone, Serialize)]
+pub struct UserRow {
+    pub id: i64,
+    pub username: String,
+    pub password_hash: String,
+    pub role: String,
+    pub created_at: i64,
+    pub last_login: Option<i64>,
+}
+
 pub async fn get_user(pool: &DbPool, username: &str) -> Result<Option<(i64, String)>, sqlx::Error> {
     sqlx::query_as::<_, (i64, String)>("SELECT id, password_hash FROM users WHERE username = ?")
         .bind(username)
@@ -460,13 +505,149 @@ pub async fn get_user(pool: &DbPool, username: &str) -> Result<Option<(i64, Stri
         .await
 }
 
+pub async fn get_user_full(pool: &DbPool, username: &str) -> Result<Option<UserRow>, sqlx::Error> {
+    sqlx::query_as::<_, UserRow>("SELECT id, username, password_hash, role, created_at, last_login FROM users WHERE username = ?")
+        .bind(username)
+        .fetch_optional(pool)
+        .await
+}
+
+pub async fn get_all_users(pool: &DbPool) -> Result<Vec<UserRow>, sqlx::Error> {
+    sqlx::query_as::<_, UserRow>("SELECT id, username, password_hash, role, created_at, last_login FROM users ORDER BY id")
+        .fetch_all(pool)
+        .await
+}
+
 pub async fn create_user(pool: &DbPool, username: &str, password_hash: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)")
+    sqlx::query("INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, 'admin')")
         .bind(username)
         .bind(password_hash)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn create_user_with_role(pool: &DbPool, username: &str, password_hash: &str, role: &str) -> Result<i64, sqlx::Error> {
+    let id = sqlx::query("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)")
+        .bind(username)
+        .bind(password_hash)
+        .bind(role)
+        .execute(pool)
+        .await?
+        .last_insert_rowid();
+    Ok(id)
+}
+
+pub async fn update_user_password(pool: &DbPool, user_id: i64, password_hash: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(password_hash)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_user_role(pool: &DbPool, user_id: i64, role: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET role = ? WHERE id = ?")
+        .bind(role)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn delete_user(pool: &DbPool, user_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_last_login(pool: &DbPool, user_id: i64) -> Result<(), sqlx::Error> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    sqlx::query("UPDATE users SET last_login = ? WHERE id = ?")
+        .bind(now)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+// --- Audit Logs ---
+
+#[derive(sqlx::FromRow, Debug, Clone, Serialize)]
+pub struct AuditLogRow {
+    pub id: i64,
+    pub timestamp: i64,
+    pub user_id: Option<i64>,
+    pub username: String,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: Option<String>,
+    pub details: Option<String>,
+    pub ip_address: Option<String>,
+}
+
+pub async fn insert_audit_log(
+    pool: &DbPool,
+    username: &str,
+    user_id: Option<i64>,
+    action: &str,
+    resource_type: &str,
+    resource_id: Option<&str>,
+    details: Option<&str>,
+    ip_address: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO audit_logs (username, user_id, action, resource_type, resource_id, details, ip_address)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(username)
+    .bind(user_id)
+    .bind(action)
+    .bind(resource_type)
+    .bind(resource_id)
+    .bind(details)
+    .bind(ip_address)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_audit_logs(pool: &DbPool, limit: i64, offset: i64) -> Result<Vec<AuditLogRow>, sqlx::Error> {
+    sqlx::query_as::<_, AuditLogRow>(
+        "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_audit_logs_by_user(pool: &DbPool, username: &str, limit: i64) -> Result<Vec<AuditLogRow>, sqlx::Error> {
+    sqlx::query_as::<_, AuditLogRow>(
+        "SELECT * FROM audit_logs WHERE username = ? ORDER BY timestamp DESC LIMIT ?"
+    )
+    .bind(username)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_audit_logs_by_resource(pool: &DbPool, resource_type: &str, limit: i64) -> Result<Vec<AuditLogRow>, sqlx::Error> {
+    sqlx::query_as::<_, AuditLogRow>(
+        "SELECT * FROM audit_logs WHERE resource_type = ? ORDER BY timestamp DESC LIMIT ?"
+    )
+    .bind(resource_type)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
 }
 
 // --- Stats ---

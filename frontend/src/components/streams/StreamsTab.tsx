@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RefreshCw, Plus, Trash2 } from "lucide-react";
 import { useStreams, useAddStream, useDeleteStream } from "@/hooks/useHosts";
+import { useAuth } from "@/App";
 import type { Stream } from "@/hooks/useHosts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
 import { toast } from "sonner";
 
 export function StreamsTab() {
+  const { canManageHosts } = useAuth();
   const { data: streams, isLoading, refetch } = useStreams();
   const addStreamMutation = useAddStream();
   const deleteStreamMutation = useDeleteStream();
@@ -60,6 +62,7 @@ export function StreamsTab() {
                 <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
                   <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </Button>
+                {canManageHosts && (
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                   <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Add Stream</Button></DialogTrigger>
                   <DialogContent>
@@ -96,6 +99,7 @@ export function StreamsTab() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                )}
               </div>
             </div>
        </CardHeader>
@@ -116,9 +120,11 @@ export function StreamsTab() {
                     <TableCell><Badge variant="outline">{stream.protocol.toUpperCase()}</Badge></TableCell>
                     <TableCell className="font-mono">{stream.forward_host}:{stream.forward_port}</TableCell>
                     <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteStream(stream.listen_port)}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
+                        {canManageHosts && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteStream(stream.listen_port)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        )}
                     </TableCell>
                  </TableRow>
                ))}
