@@ -1,27 +1,39 @@
-use crate::state::AppState;
+use crate::state::{AppState, HostConfig, LocationConfig};
 use async_trait::async_trait;
 use pingora::prelude::*;
 use pingora::http::ResponseHeader;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use bytes::Bytes;
+use std::time::Duration;
 
 pub struct DynamicProxy {
     pub state: Arc<AppState>,
 }
 
+pub struct ProxyCtx {
+    pub host: String,
+    pub host_config: Option<HostConfig>,
+    pub matched_location: Option<LocationConfig>,
+}
+
 #[async_trait]
 impl ProxyHttp for DynamicProxy {
-    /// 요청마다의 컨텍스트 (필요하다면 여기에 로깅 정보 등을 담음)
-    type CTX = ();
+    type CTX = ProxyCtx;
 
     fn new_ctx(&self) -> Self::CTX {
-        ()
+        ProxyCtx {
+            host: String::new(),
+            host_config: None,
+            matched_location: None,
+        }
     }
 
-    /// 요청 필터링: ACME Challenge 처리
-    async fn request_filter(&self, session: &mut Session, _ctx: &mut Self::CTX) -> Result<bool> {
+    /// 요청 필터링: ACME Challenge 처리 및 라우팅 정보 조회
+    async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         let path = session.req_header().uri.path();
         
+        // 1. ACME Challenge 처리
         if path.starts_with("/.well-known/acme-challenge/") {
             let token = path.trim_start_matches("/.well-known/acme-challenge/");
             tracing::info!("📢 ACME Challenge received for token: {}", token);
@@ -32,9 +44,7 @@ impl ProxyHttp for DynamicProxy {
                 let body_bytes = Bytes::from(key_auth);
                 header.insert_header("Content-Length", body_bytes.len().to_string()).unwrap();
                 
-                // 헤더 전송 (스트림 안 끝남)
                 session.write_response_header(Box::new(header), false).await?;
-                // 바디 전송 (스트림 끝남)
                 session.write_response_body(Some(body_bytes), true).await?;
                 return Ok(true); // 요청 처리 완료
             } else {
@@ -43,62 +53,146 @@ impl ProxyHttp for DynamicProxy {
                 return Ok(true);
             }
         }
-        
-        Ok(false) // 일반 요청은 계속 진행
-    }
 
-    /// 실제 라우팅 로직
-    async fn upstream_peer(
-        &self,
-        session: &mut Session,
-        _ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>> {
-        // 1. Host 헤더 파싱
+        // 2. Host 파싱 및 설정 조회 (Context에 저장)
         let host = session
             .req_header()
             .headers
             .get("Host")
             .and_then(|h| h.to_str().ok())
             .unwrap_or_default()
-            // 포트 번호 제거 (예: example.com:8080 -> example.com)
             .split(':')
             .next()
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .to_string();
 
-        // 2. 상태(State)에서 라우팅 조회 (Lock-Free Fast Path)
-        if let Some(host_config) = self.state.get_host_config(host) {
-            let use_tls = host_config.scheme == "https";
-            tracing::info!("Routing {} -> {} (TLS: {})", host, host_config.target, use_tls);
+        ctx.host = host.clone();
+
+        if let Some(host_config) = self.state.get_host_config(&host) {
+            ctx.host_config = Some(host_config.clone());
+
+            // Location Matching (Longest Prefix Match)
+            let mut best_match_len = 0;
+            let mut matched_loc = None;
+
+            for loc in &host_config.locations {
+                if path.starts_with(&loc.path) && loc.path.len() > best_match_len {
+                    matched_loc = Some(loc.clone());
+                    best_match_len = loc.path.len();
+                }
+            }
+            ctx.matched_location = matched_loc;
+        }
+        
+        Ok(false) // 일반 요청은 계속 진행
+    }
+
+    /// 업스트림 요청 전 필터링 (Path Rewrite 수행)
+    async fn upstream_request_filter(
+        &self,
+        session: &mut Session,
+        _upstream_request: &mut RequestHeader,
+        ctx: &mut Self::CTX,
+    ) -> Result<()> {
+        // ctx.matched_location이 있고 rewrite 옵션이 켜져 있다면 경로 재작성
+        if let Some(loc) = &ctx.matched_location {
+            if loc.rewrite {
+                let original_path = session.req_header().uri.path().to_string();
+                if original_path.starts_with(&loc.path) {
+                    // Prefix 제거
+                    let new_path = if original_path.len() == loc.path.len() {
+                        "/"
+                    } else {
+                        &original_path[loc.path.len()..]
+                    };
+                    
+                    // 쿼리 스트링 보존
+                    let new_uri = if let Some(query) = session.req_header().uri.query() {
+                        format!("{}?{}", new_path, query)
+                    } else {
+                        new_path.to_string()
+                    };
+
+                    // URI 업데이트 (RequestHeader 수정)
+                    let _ = session.req_header_mut().set_uri(new_uri.parse().unwrap());
+                    tracing::info!("🔄 Rewrote path: {} -> {}", original_path, new_path);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 실제 라우팅 로직 (CTX 활용)
+    async fn upstream_peer(
+        &self,
+        _session: &mut Session,
+        ctx: &mut Self::CTX,
+    ) -> Result<Box<HttpPeer>> {
+        if let Some(host_config) = &ctx.host_config {
+            let (target, scheme) = if let Some(loc) = &ctx.matched_location {
+                (&loc.target, &loc.scheme)
+            } else {
+                (&host_config.target, &host_config.scheme)
+            };
+
+            let use_tls = scheme == "https";
+            tracing::info!("Routing {} -> {} (TLS: {})", ctx.host, target, use_tls);
             
             let mut peer = Box::new(HttpPeer::new(
-                host_config.target, 
+                target, 
                 use_tls,
-                host.to_string()
+                ctx.host.clone()
             ));
             
-            // HTTPS 업스트림인 경우 SNI 설정 (필요시)
             if use_tls {
-                // Pingora 0.6 PeerOptions: verify_cert는 필드일 수 있음.
-                // 만약 private이라면 생성자에서 처리해야 함.
-                // HttpPeer::new() 시점에 옵션을 다 넣을 순 없음.
-                
-                // 시도 1: 필드 직접 접근 (verify_cert)
-                // peer.options.verify_cert = false; 
-                
-                // 시도 2: sni 설정 (보통 이걸 해야 함)
-                peer.sni = host.to_string();
-                
-                // Pingora에서 TLS 검증을 끄는 건 보안상 위험하지만, 사용자가 원할 수 있음.
-                // 여기서는 verify_cert 메서드가 없다고 하므로 일단 주석 처리하고
-                // SNI만 설정합니다. (SNI가 없으면 핸드셰이크 실패할 수 있음)
-                // peer.options.verify_cert = false; 
+                peer.sni = ctx.host.clone();
             }
+
+            peer.options.connection_timeout = Some(Duration::from_millis(500));
+            peer.options.read_timeout = Some(Duration::from_secs(10));
+            peer.options.write_timeout = Some(Duration::from_secs(5));
 
             return Ok(peer);
         }
 
-        // 3. 매칭되는 호스트가 없을 경우
-        tracing::warn!("No route found for host: {}", host);
+        tracing::warn!("No route found for host: {}", ctx.host);
         Err(Error::explain(ErrorType::HTTPStatus(404), "Host not found"))
+    }
+
+    /// 요청 로깅 및 통계 집계 (응답 전송 후 호출됨)
+    async fn logging(
+        &self,
+        session: &mut Session,
+        _e: Option<&pingora::Error>,
+        _ctx: &mut Self::CTX,
+    ) {
+        // 1. 통계 업데이트
+        self.state.metrics.total_requests.fetch_add(1, Ordering::Relaxed);
+        
+        if let Some(resp) = session.response_written() {
+            let status = resp.status.as_u16();
+            let body_len = session.body_bytes_sent() as u64;
+
+            self.state.metrics.total_bytes.fetch_add(body_len, Ordering::Relaxed);
+
+            if status >= 200 && status < 300 {
+                self.state.metrics.status_2xx.fetch_add(1, Ordering::Relaxed);
+            } else if status >= 400 && status < 500 {
+                self.state.metrics.status_4xx.fetch_add(1, Ordering::Relaxed);
+            } else if status >= 500 {
+                self.state.metrics.status_5xx.fetch_add(1, Ordering::Relaxed);
+            }
+
+            // 2. 액세스 로그
+            tracing::info!(
+                target: "access_log",
+                method = %session.req_header().method,
+                path = %session.req_header().uri.path(),
+                status = status,
+                bytes = body_len,
+                host = ?session.req_header().headers.get("Host"),
+                "Request handled"
+            );
+        }
     }
 }

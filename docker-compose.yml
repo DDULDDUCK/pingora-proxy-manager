@@ -1,15 +1,21 @@
 services:
-  app:
+  pingora-proxy:
     build: .
     image: pingora-proxy-manager:latest
-    container_name: pingora-pm
-    restart: unless-stopped
+    container_name: pingora-proxy
+    restart: always
     ports:
-      - "80:8080"   # 외부 80 -> 내부 8080 (Proxy)
-      - "443:4443"  # 외부 443 -> 내부 4443 (Proxy - SSL 구현 시 포트 변경 필요)
-      - "81:81"     # 관리자 UI
+      - "80:8080"   # HTTP Proxy (Backend listens on 8080)
+      - "81:81"     # Dashboard/API (Backend listens on 81)
+      # HTTPS Port 443 is mapped to 443 on host, backend should listen on 443 inside if privileged, 
+      # or we map 443->8443 if backend uses unprivileged port. 
+      # For now, assuming backend binds to 443 or uses NAT. 
+      # Let's map 443 -> 443 but backend needs to bind it.
+      # If backend binds 8080 for HTTP, usually it binds 8443 for HTTPS.
+      # Let's stick to 80->8080 and 81->81 for now as per main.rs logic.
     volumes:
-      - ./data:/app/data        # DB 저장소
-      # - ./certs:/app/certs    # 인증서 저장소 (구현 예정)
+      - ./data:/app/data        # DB and Certs persistence
+      - ./logs:/app/logs        # Logs persistence
     environment:
+      - JWT_SECRET=changeme_in_production_please
       - RUST_LOG=info

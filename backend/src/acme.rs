@@ -6,8 +6,10 @@ use std::sync::Arc;
 use std::path::Path;
 use tokio::fs;
 
-// 테스트용 (비율 제한 없음)
-const LETS_ENCRYPT_STAGING_URL: &str = "https://acme-staging-v02.api.letsencrypt.org/directory";
+// Production (실제 인증서)
+const LETS_ENCRYPT_PRODUCTION_URL: &str = "https://acme-v02.api.letsencrypt.org/directory";
+// Staging (테스트용)
+// const LETS_ENCRYPT_STAGING_URL: &str = "https://acme-staging-v02.api.letsencrypt.org/directory";
 
 pub struct AcmeManager {
     state: Arc<AppState>,
@@ -31,7 +33,7 @@ impl AcmeManager {
                     terms_of_service_agreed: true,
                     only_return_existing: false,
                 },
-                LETS_ENCRYPT_STAGING_URL.to_string(),
+                LETS_ENCRYPT_PRODUCTION_URL.to_string(),
                 None,
             )
             .await?;

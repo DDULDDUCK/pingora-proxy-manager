@@ -12,8 +12,14 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// TODO: 프로덕션에서는 반드시 환경변수나 파일에서 로드해야 함!
-const JWT_SECRET: &[u8] = b"super_secret_key_change_me_in_production";
+use std::env;
+
+// 환경 변수에서 JWT Secret 가져오기
+fn get_jwt_secret() -> Vec<u8> {
+    env::var("JWT_SECRET")
+        .unwrap_or_else(|_| "super_secret_key_change_me_in_production".to_string())
+        .into_bytes()
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -72,7 +78,7 @@ pub fn create_jwt(username: &str) -> Result<String, AuthError> {
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(JWT_SECRET),
+        &EncodingKey::from_secret(&get_jwt_secret()),
     )
     .map_err(|_| AuthError::TokenCreation)
 }
@@ -93,7 +99,7 @@ where
 
         let token_data = decode::<Claims>(
             bearer.token(),
-            &DecodingKey::from_secret(JWT_SECRET),
+            &DecodingKey::from_secret(&get_jwt_secret()),
             &Validation::default(),
         )
         .map_err(|_| AuthError::InvalidToken)?;

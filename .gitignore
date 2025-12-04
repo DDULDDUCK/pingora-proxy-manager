@@ -2,6 +2,7 @@
 target/
 **/*.rs.bk
 Cargo.lock
+.env
 
 # Node.js
 node_modules/
