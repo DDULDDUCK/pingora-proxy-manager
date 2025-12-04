@@ -2,10 +2,13 @@ use crate::state::{AppState, HostConfig, LocationConfig};
 use async_trait::async_trait;
 use pingora::prelude::*;
 use pingora::http::ResponseHeader;
+use http::header::HeaderName; 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use bytes::Bytes;
 use std::time::Duration;
+use crate::auth; 
+use base64::{Engine as _, engine::general_purpose};
 
 pub struct DynamicProxy {
     pub state: Arc<AppState>,
@@ -36,8 +39,6 @@ impl ProxyHttp for DynamicProxy {
         // 1. ACME Challenge 처리
         if path.starts_with("/.well-known/acme-challenge/") {
             let token = path.trim_start_matches("/.well-known/acme-challenge/");
-            tracing::info!("📢 ACME Challenge received for token: {}", token);
-
             if let Some(key_auth) = self.state.get_acme_challenge(token) {
                 let mut header = ResponseHeader::build(200, Some(4)).unwrap();
                 header.insert_header("Content-Type", "text/plain").unwrap();
@@ -46,15 +47,14 @@ impl ProxyHttp for DynamicProxy {
                 
                 session.write_response_header(Box::new(header), false).await?;
                 session.write_response_body(Some(body_bytes), true).await?;
-                return Ok(true); // 요청 처리 완료
+                return Ok(true); 
             } else {
-                tracing::warn!("⚠️ Unknown ACME token: {}", token);
                 let _ = session.respond_error(404).await;
                 return Ok(true);
             }
         }
 
-        // 2. Host 파싱 및 설정 조회 (Context에 저장)
+        // 2. Host 파싱
         let host = session
             .req_header()
             .headers
@@ -68,10 +68,132 @@ impl ProxyHttp for DynamicProxy {
 
         ctx.host = host.clone();
 
+        // 3. 설정 조회 및 Access List 검사
         if let Some(host_config) = self.state.get_host_config(&host) {
             ctx.host_config = Some(host_config.clone());
 
-            // Location Matching (Longest Prefix Match)
+            // 🔥 [Access List 검사 로직 시작] 🔥
+            if let Some(acl_id) = host_config.access_list_id {
+                // ACL ID가 설정되어 있다면 검사 수행
+                if let Some(acl) = self.state.get_access_list(acl_id) {
+                    
+                    // (A) IP 기반 필터링
+                    if !acl.ips.is_empty() {
+                        // 클라이언트 IP 추출 (포트 제거)
+                        let client_ip = session.client_addr()
+                            .map(|a| a.to_string())
+                            .unwrap_or_default();
+                        let client_ip = client_ip.split(':').next().unwrap_or(&client_ip).to_string();
+
+                        let mut ip_allowed = true; // 기본값
+                        let mut has_allow_rules = false;
+
+                        for rule in &acl.ips {
+                            if rule.action == "allow" {
+                                has_allow_rules = true;
+                                if rule.ip == client_ip {
+                                    ip_allowed = true;
+                                    break; // 허용 규칙에 맞으면 즉시 통과
+                                } else {
+                                    ip_allowed = false; // Allow 규칙이 하나라도 있으면 기본은 Deny
+                                }
+                            } else if rule.action == "deny" {
+                                if rule.ip == client_ip {
+                                    tracing::warn!("⛔ Access Denied (IP Blocked): {} -> {}", client_ip, ctx.host);
+                                    let _ = session.respond_error(403).await;
+                                    return Ok(true); // 요청 거부
+                                }
+                            }
+                        }
+
+                        // Allow 규칙이 존재하는데 매칭되지 않은 경우
+                        if has_allow_rules && !ip_allowed {
+                            tracing::warn!("⛔ Access Denied (IP Not Allowed): {} -> {}", client_ip, ctx.host);
+                            let _ = session.respond_error(403).await;
+                            return Ok(true); // 요청 거부
+                        }
+                    }
+
+                    // (B) Basic Auth (사용자 인증)
+                    if !acl.clients.is_empty() {
+                        let auth_header = session.req_header().headers.get("Authorization");
+                        let mut authenticated = false;
+
+                        if let Some(value) = auth_header {
+                            if let Ok(v_str) = value.to_str() {
+                                if v_str.starts_with("Basic ") {
+                                    let encoded = &v_str[6..];
+                                    // Base64 디코딩
+                                    if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
+                                        if let Ok(creds) = String::from_utf8(decoded) {
+                                            if let Some((username, password)) = creds.split_once(':') {
+                                                // 사용자 찾기 및 비밀번호 검증
+                                                if let Some(client_conf) = acl.clients.iter().find(|c| c.username == username) {
+                                                    if auth::verify_password(password, &client_conf.password_hash) {
+                                                        authenticated = true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if !authenticated {
+                            // 인증 실패 시 로그인 창 팝업 (401)
+                            tracing::info!("🔒 Authentication required for {}", ctx.host);
+                            let mut header = ResponseHeader::build(401, Some(4)).unwrap();
+                            header.insert_header("WWW-Authenticate", "Basic realm=\"Restricted Area\"").unwrap();
+                            header.insert_header("Content-Length", "0").unwrap();
+                            session.write_response_header(Box::new(header), true).await?;
+                            return Ok(true); // 요청 처리 중단 (클라이언트는 로그인 창 띄움)
+                        }
+                    }
+                }
+            }
+            // 🔥 [Access List 검사 로직 끝] 🔥
+
+
+            // 4. Redirection Host Check
+            if let Some(redirect_target) = &host_config.redirect_to {
+                 let status = host_config.redirect_status;
+                 let query = session.req_header().uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
+                 
+                 let target = if redirect_target.ends_with('/') && path.starts_with('/') {
+                     &redirect_target[..redirect_target.len()-1]
+                 } else {
+                     redirect_target
+                 };
+                 
+                 let new_url = format!("{}{}{}", target, path, query);
+                 let mut header = ResponseHeader::build(status, Some(4)).unwrap();
+                 header.insert_header("Location", new_url).unwrap();
+                 header.insert_header("Content-Length", "0").unwrap();
+                 
+                 session.write_response_header(Box::new(header), true).await?;
+                 return Ok(true);
+            }
+
+            // 5. SSL Forced Redirect
+            let is_tls = session
+                .server_addr()
+                .map(|a| a.as_inet().map(|s| s.port() == 443).unwrap_or(false))
+                .unwrap_or(false);
+
+            if host_config.ssl_forced && !is_tls {
+                let query = session.req_header().uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
+                let new_url = format!("https://{}{}{}", host, path, query);
+
+                let mut header = ResponseHeader::build(301, Some(4)).unwrap();
+                header.insert_header("Location", new_url).unwrap();
+                header.insert_header("Content-Length", "0").unwrap();
+                
+                session.write_response_header(Box::new(header), true).await?;
+                return Ok(true);
+            }
+
+            // 6. Location Matching
             let mut best_match_len = 0;
             let mut matched_loc = None;
 
@@ -84,38 +206,75 @@ impl ProxyHttp for DynamicProxy {
             ctx.matched_location = matched_loc;
         }
         
-        Ok(false) // 일반 요청은 계속 진행
+        Ok(false)
     }
 
-    /// 업스트림 요청 전 필터링 (Path Rewrite 수행)
+    /// 업스트림 요청 전 필터링 (Path Rewrite 및 Request Headers 수행)
     async fn upstream_request_filter(
         &self,
         session: &mut Session,
-        _upstream_request: &mut RequestHeader,
+        upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
-        // ctx.matched_location이 있고 rewrite 옵션이 켜져 있다면 경로 재작성
+        // ... (Path Rewrite 로직은 기존 유지) ...
         if let Some(loc) = &ctx.matched_location {
-            if loc.rewrite {
+            // (Path Rewrite 내용 생략 - 기존 코드 그대로 두세요)
+             if loc.rewrite {
                 let original_path = session.req_header().uri.path().to_string();
                 if original_path.starts_with(&loc.path) {
-                    // Prefix 제거
                     let new_path = if original_path.len() == loc.path.len() {
                         "/"
                     } else {
                         &original_path[loc.path.len()..]
                     };
                     
-                    // 쿼리 스트링 보존
                     let new_uri = if let Some(query) = session.req_header().uri.query() {
                         format!("{}?{}", new_path, query)
                     } else {
                         new_path.to_string()
                     };
 
-                    // URI 업데이트 (RequestHeader 수정)
-                    let _ = session.req_header_mut().set_uri(new_uri.parse().unwrap());
+                    let _ = upstream_request.set_uri(new_uri.parse().unwrap());
                     tracing::info!("🔄 Rewrote path: {} -> {}", original_path, new_path);
+                }
+            }
+        }
+
+        // 2. Custom Request Headers (수정됨)
+        if let Some(host_config) = &ctx.host_config {
+            let headers = self.state.get_headers(host_config.id);
+            for h in headers {
+                if h.target == "request" {
+                    // 👇 String -> HeaderName 안전하게 변환
+                    if let Ok(header_name) = HeaderName::from_bytes(h.name.as_bytes()) {
+                        // remove_header도 HeaderName을 받으면 안전합니다.
+                        let _ = upstream_request.remove_header(&header_name);
+                        // insert_header에 소유권이 있는 header_name을 넘김
+                        upstream_request.insert_header(header_name, &h.value).unwrap();
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 업스트림 응답 필터링 (Response Headers 수행)
+    fn upstream_response_filter(
+        &self,
+        _session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) -> Result<()> {
+        if let Some(host_config) = &ctx.host_config {
+            let headers = self.state.get_headers(host_config.id);
+            for h in headers {
+                if h.target == "response" {
+                    // 👇 String -> HeaderName 안전하게 변환
+                    if let Ok(header_name) = HeaderName::from_bytes(h.name.as_bytes()) {
+                        let _ = upstream_response.remove_header(&header_name);
+                        upstream_response.insert_header(header_name, &h.value).unwrap();
+                    }
                 }
             }
         }

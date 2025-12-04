@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
-import { RefreshCw, Plus, Settings, ShieldCheck, Trash2, CornerDownRight, ArrowRightLeft } from "lucide-react";
+import { RefreshCw, Plus, Settings, ShieldCheck, Trash2, CornerDownRight, ArrowRightLeft, Link2, Lock } from "lucide-react";
 import { useHosts, useAddHost, useDeleteHost, useAddLocation, useDeleteLocation, useIssueCert } from "@/hooks/useHosts";
+import { useAccessLists } from "@/hooks/useAccessLists";
 import type { Host, Location } from "@/hooks/useHosts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,8 @@ import { toast } from "sonner";
 
 export function HostsTab() {
   const { data: hosts, isLoading, refetch } = useHosts();
+  const { data: accessLists } = useAccessLists();
+  
   const addHostMutation = useAddHost();
   const deleteHostMutation = useDeleteHost();
   const addLocationMutation = useAddLocation();
@@ -32,7 +35,15 @@ export function HostsTab() {
   
   // Add Host Dialog
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newHost, setNewHost] = useState<Partial<Host>>({ domain: "", target: "", scheme: "http" });
+  const [newHost, setNewHost] = useState<Partial<Host>>({ 
+      domain: "", 
+      target: "", 
+      scheme: "http", 
+      ssl_forced: false,
+      redirect_to: "",
+      redirect_status: 301,
+      access_list_id: null
+  });
 
   // Edit Host Dialog
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -40,11 +51,19 @@ export function HostsTab() {
   const [newLocation, setNewLocation] = useState<Location>({ path: "/", target: "", scheme: "http", rewrite: false });
 
   const handleAddHost = () => {
-    if (!newHost.domain || !newHost.target) return toast.warning("Missing fields");
-    addHostMutation.mutate(newHost, {
+    if (!newHost.domain) return toast.warning("Domain is required");
+    
+    const hostPayload = {
+        ...newHost,
+        target: newHost.target || "127.0.0.1:8080", 
+        redirect_to: newHost.redirect_to || null,
+        access_list_id: newHost.access_list_id === 0 ? null : newHost.access_list_id
+    };
+
+    addHostMutation.mutate(hostPayload, {
       onSuccess: () => {
         setIsAddOpen(false);
-        setNewHost({ domain: "", target: "", scheme: "http" });
+        setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, redirect_to: "", redirect_status: 301, access_list_id: null });
       }
     });
   };
@@ -95,7 +114,7 @@ export function HostsTab() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <CardTitle>Proxy Hosts</CardTitle>
-                <CardDescription>Manage your routing rules.</CardDescription>
+                <CardDescription>Manage your routing and redirection rules.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Input
@@ -109,26 +128,76 @@ export function HostsTab() {
                 </Button>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                   <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Add Host</Button></DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-lg">
                     <DialogHeader><DialogTitle>Add New Host</DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                       <div className="grid gap-2">
                         <Label>Domain</Label>
                         <Input value={newHost.domain} onChange={e => setNewHost({...newHost, domain: e.target.value})} placeholder="example.com" />
                       </div>
-                      <div className="grid gap-2">
-                         <Label>Scheme</Label>
-                         <Select value={newHost.scheme} onValueChange={v => setNewHost({...newHost, scheme: v as any})}>
-                           <SelectTrigger><SelectValue /></SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="http">http://</SelectItem>
-                             <SelectItem value="https">https://</SelectItem>
-                           </SelectContent>
-                         </Select>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                             <Label>Scheme</Label>
+                             <Select value={newHost.scheme} onValueChange={v => setNewHost({...newHost, scheme: v as any})}>
+                               <SelectTrigger><SelectValue /></SelectTrigger>
+                               <SelectContent>
+                                 <SelectItem value="http">http://</SelectItem>
+                                 <SelectItem value="https">https://</SelectItem>
+                               </SelectContent>
+                             </Select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Target</Label>
+                            <Input value={newHost.target} onChange={e => setNewHost({...newHost, target: e.target.value})} placeholder="127.0.0.1:8080" />
+                          </div>
                       </div>
+
                       <div className="grid gap-2">
-                        <Label>Target</Label>
-                        <Input value={newHost.target} onChange={e => setNewHost({...newHost, target: e.target.value})} placeholder="127.0.0.1:8080" />
+                          <Label>Access List</Label>
+                          <Select value={newHost.access_list_id?.toString() || "0"} onValueChange={v => setNewHost({...newHost, access_list_id: parseInt(v)})}>
+                              <SelectTrigger><SelectValue placeholder="Public (No Auth)" /></SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="0">Public (No Auth)</SelectItem>
+                                  {accessLists?.map(acl => (
+                                      <SelectItem key={acl.id} value={acl.id.toString()}>{acl.name}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                          </Select>
+                      </div>
+
+                      <div className="flex items-center space-x-2 pt-2">
+                          <input 
+                            type="checkbox" 
+                            id="ssl_forced" 
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            checked={newHost.ssl_forced || false}
+                            onChange={e => setNewHost({...newHost, ssl_forced: e.target.checked})}
+                          />
+                          <Label htmlFor="ssl_forced" className="cursor-pointer flex items-center">
+                              Force SSL
+                              <Badge variant="outline" className="ml-2 text-[10px] bg-yellow-50 text-yellow-700 border-yellow-200">HTTPS Only</Badge>
+                          </Label>
+                      </div>
+
+                      <div className="border-t pt-4 mt-2">
+                          <Label className="text-muted-foreground mb-2 block">Redirection (Optional)</Label>
+                          <div className="grid grid-cols-3 gap-4">
+                              <div className="col-span-2 grid gap-2">
+                                  <Label className="text-xs">Redirect To URL</Label>
+                                  <Input value={newHost.redirect_to || ""} onChange={e => setNewHost({...newHost, redirect_to: e.target.value})} placeholder="https://google.com" />
+                              </div>
+                              <div className="grid gap-2">
+                                  <Label className="text-xs">Status Code</Label>
+                                  <Select value={newHost.redirect_status?.toString()} onValueChange={v => setNewHost({...newHost, redirect_status: parseInt(v)})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="301">301 (Perm)</SelectItem>
+                                      <SelectItem value="302">302 (Temp)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                              </div>
+                          </div>
                       </div>
                     </div>
                     <DialogFooter>
@@ -147,16 +216,37 @@ export function HostsTab() {
              <TableHeader>
                <TableRow>
                  <TableHead>Domain</TableHead>
-                 <TableHead>Target</TableHead>
-                 <TableHead>Locations</TableHead>
+                 <TableHead>Destination</TableHead>
+                 <TableHead>Status</TableHead>
                  <TableHead className="text-right">Actions</TableHead>
                </TableRow>
              </TableHeader>
              <TableBody>
                {filteredHosts.map(host => (
                  <TableRow key={host.domain}>
-                    <TableCell className="font-medium">{host.domain}</TableCell>
-                    <TableCell>{host.target} <Badge variant="outline" className="ml-2 text-[10px]">{host.scheme}</Badge></TableCell>
+                    <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                            <span>{host.domain}</span>
+                            <div className="flex gap-1 mt-1">
+                                {host.ssl_forced && <Badge variant="outline" className="text-[10px] border-green-200 text-green-700 bg-green-50"><ShieldCheck className="h-3 w-3 mr-1"/> SSL</Badge>}
+                                {host.access_list_id && <Badge variant="outline" className="text-[10px] border-orange-200 text-orange-700 bg-orange-50"><Lock className="h-3 w-3 mr-1"/> ACL</Badge>}
+                            </div>
+                        </div>
+                    </TableCell>
+                    <TableCell>
+                        {host.redirect_to ? (
+                            <div className="flex items-center text-blue-600">
+                                <Link2 className="h-3 w-3 mr-1" />
+                                <span className="text-xs font-mono">{host.redirect_to}</span>
+                                <Badge variant="secondary" className="ml-2 text-[10px]">{host.redirect_status}</Badge>
+                            </div>
+                        ) : (
+                            <div className="flex items-center">
+                                <span className="text-sm">{host.target}</span>
+                                <Badge variant="outline" className="ml-2 text-[10px]">{host.scheme}</Badge>
+                            </div>
+                        )}
+                    </TableCell>
                     <TableCell>
                       {host.locations && host.locations.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -216,7 +306,7 @@ export function HostsTab() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="http">http</SelectItem>
-                        <SelectItem value="https">https</SelectItem>
+                        <SelectItem value="https">https://</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -228,7 +318,7 @@ export function HostsTab() {
                         checked={newLocation.rewrite || false}
                         onChange={e => setNewLocation({...newLocation, rewrite: e.target.checked})}
                       />
-                      <Label htmlFor="rewrite" className="cursor-pointer">Strip Path (Rewrite)</Label>
+                      <Label htmlFor="rewrite" className="cursor-pointer">Strip Path</Label>
                   </div>
                   <Button className="ml-auto" onClick={handleAddLocation} disabled={addLocationMutation.isPending}>
                       <Plus className="h-4 w-4 mr-2" /> Add

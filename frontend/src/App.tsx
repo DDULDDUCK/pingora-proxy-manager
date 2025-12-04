@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Toaster, toast } from "sonner";
 import { 
-  Server, Lock, LogOut, Loader2
+  Lock, LogOut, Loader2
 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -16,8 +16,12 @@ import {
 
 import { DashboardTab } from "@/components/dashboard/DashboardTab";
 import { HostsTab } from "@/components/hosts/HostsTab";
+import { StreamsTab } from "@/components/streams/StreamsTab";
 import { LogsTab } from "@/components/dashboard/LogsTab";
+import { SettingsTab } from "@/components/dashboard/SettingsTab";
+import { AccessListsTab } from "@/components/access/AccessListsTab"; // Added
 import { api } from "@/lib/api";
+import ppnIcon from '@/assets/ppnicon.png'; 
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,8 +132,8 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-primary text-primary-foreground p-2 rounded-lg">
-              <Server className="h-6 w-6" />
+            <div className="p-2 rounded-lg">
+              <img src={ppnIcon} alt="App Icon" className="h-8 w-8" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -153,7 +157,10 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
           <TabsList>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="hosts">Hosts</TabsTrigger>
+            <TabsTrigger value="streams">Streams</TabsTrigger>
+            <TabsTrigger value="access">Access Lists</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           
           <TabsContent value="dashboard" className="space-y-4">
@@ -164,8 +171,20 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
             <HostsTab />
           </TabsContent>
 
+          <TabsContent value="streams" className="space-y-4">
+            <StreamsTab />
+          </TabsContent>
+
+          <TabsContent value="access" className="space-y-4">
+            <AccessListsTab />
+          </TabsContent>
+
           <TabsContent value="logs" className="space-y-4">
              <LogsTab />
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-4">
+             <SettingsTab />
           </TabsContent>
         </Tabs>
       </div>

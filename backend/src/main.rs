@@ -4,9 +4,11 @@ mod auth;
 mod db;
 mod proxy;
 mod state;
+mod stream_manager; // Added
 
 use crate::proxy::DynamicProxy;
 use crate::state::{AppState, ProxyConfig, HostConfig, LocationConfig};
+use crate::stream_manager::StreamManager; // Added
 use pingora::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -67,8 +69,20 @@ fn main() {
         // 3. 초기 상태 로드
         let hosts_result = db::get_all_hosts(&pool).await;
         let locations_result = db::get_all_locations(&pool).await;
+        let access_lists_result = db::get_all_access_lists(&pool).await;
+        let clients_result = db::get_access_list_clients(&pool).await;
+        let ips_result = db::get_access_list_ips(&pool).await;
+        let headers_result = db::get_all_headers(&pool).await;
 
-        if let (Ok(rows), Ok(loc_rows)) = (hosts_result, locations_result) {
+        if let (Ok(rows), Ok(loc_rows), Ok(al_rows), Ok(client_rows), Ok(ip_rows), Ok(header_rows)) = (
+            hosts_result, 
+            locations_result, 
+            access_lists_result, 
+            clients_result, 
+            ips_result, 
+            headers_result
+        ) {
+            // 1. Locations
             let mut locations_map: HashMap<i64, Vec<LocationConfig>> = HashMap::new();
             for loc in loc_rows {
                 locations_map.entry(loc.host_id).or_default().push(LocationConfig {
@@ -79,27 +93,77 @@ fn main() {
                 });
             }
 
+            // 2. Access Lists
+            let mut access_lists = HashMap::new();
+            
+            // Group Clients and IPs by list_id
+            let mut clients_map: HashMap<i64, Vec<crate::state::AccessListClientConfig>> = HashMap::new();
+            for c in client_rows {
+                clients_map.entry(c.list_id).or_default().push(crate::state::AccessListClientConfig {
+                    username: c.username,
+                    password_hash: c.password_hash,
+                });
+            }
+
+            let mut ips_map: HashMap<i64, Vec<crate::state::AccessListIpConfig>> = HashMap::new();
+            for ip in ip_rows {
+                ips_map.entry(ip.list_id).or_default().push(crate::state::AccessListIpConfig {
+                    ip: ip.ip_address,
+                    action: ip.action,
+                });
+            }
+
+            for al in al_rows {
+                access_lists.insert(al.id, crate::state::AccessListConfig {
+                    id: al.id,
+                    name: al.name,
+                    clients: clients_map.remove(&al.id).unwrap_or_default(),
+                    ips: ips_map.remove(&al.id).unwrap_or_default(),
+                });
+            }
+
+            // 3. Headers
+            let mut headers: HashMap<i64, Vec<crate::state::HeaderConfig>> = HashMap::new();
+            for h in header_rows {
+                headers.entry(h.host_id).or_default().push(crate::state::HeaderConfig {
+                    name: h.name,
+                    value: h.value,
+                    target: h.target,
+                });
+            }
+
             let mut hosts = HashMap::new();
             for row in rows {
                 let locs = locations_map.remove(&row.id).unwrap_or_default();
                 hosts.insert(row.domain, HostConfig {
+                    id: row.id,
                     target: row.target,
                     scheme: row.scheme,
                     locations: locs,
+                    ssl_forced: row.ssl_forced,
+                    redirect_to: row.redirect_to,
+                    redirect_status: row.redirect_status as u16,
+                    access_list_id: row.access_list_id,
                 });
             }
-            state_for_init.update_config(ProxyConfig { hosts });
-            tracing::info!("✅ Initial configuration loaded from DB (Hosts & Locations)");
+            state_for_init.update_config(ProxyConfig { hosts, access_lists, headers });
+            tracing::info!("✅ Initial configuration loaded from DB");
         } else {
             tracing::warn!("⚠️ Failed to load initial configuration from DB");
         }
+
+        // Stream Manager 초기화
+        let stream_manager = Arc::new(StreamManager::new(pool.clone()));
+        stream_manager.reload_streams().await; // 초기 로드
 
         // 4. API 서버 실행 (81번 포트)
         let pool_for_api = pool.clone();
         let state_for_api = state_for_init.clone();
         let recorder_handle_for_api = recorder_handle.clone();
+        let stream_manager_for_api = stream_manager.clone(); // API용 복제
+
         tokio::spawn(async move {
-            let app = api::router(state_for_api, pool_for_api, recorder_handle_for_api);
+            let app = api::router(state_for_api, pool_for_api, recorder_handle_for_api, stream_manager_for_api);
             let listener = tokio::net::TcpListener::bind("0.0.0.0:81").await.unwrap();
             tracing::info!("🎮 Control Plane (API) running on port 81");
             axum::serve(listener, app).await.unwrap();
@@ -171,8 +235,9 @@ fn main() {
     );
 
     my_proxy.add_tcp("0.0.0.0:8080");
+    my_proxy.add_tls("0.0.0.0:443", "data/certs/default.crt", "data/certs/default.key").unwrap();
 
     my_server.add_service(my_proxy);
-    tracing::info!("🚀 Data Plane (Proxy) running on port 8080");
+    tracing::info!("🚀 Data Plane (Proxy) running on port 8080 (HTTP) and 443 (HTTPS)");
     my_server.run_forever();
 }

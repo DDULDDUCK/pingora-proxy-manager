@@ -13,19 +13,30 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
         .await?;
 
     // 호스트 테이블 생성
-    // scheme 컬럼 추가 (http/https)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS hosts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             domain TEXT NOT NULL UNIQUE,
             target TEXT NOT NULL,
-            scheme TEXT NOT NULL DEFAULT 'http'
+            scheme TEXT NOT NULL DEFAULT 'http',
+            ssl_forced BOOLEAN NOT NULL DEFAULT 0,
+            redirect_to TEXT,
+            redirect_status INTEGER NOT NULL DEFAULT 301,
+            access_list_id INTEGER,
+            FOREIGN KEY(access_list_id) REFERENCES access_lists(id)
         );
         "#,
     )
     .execute(&pool)
     .await?;
+
+    // 마이그레이션: access_list_id 컬럼이 없으면 추가 (기존 DB 호환성)
+    // Note: SQLite에서 컬럼 존재 여부 확인 후 추가하는 로직은 복잡하므로, 
+    // 단순하게 실패를 허용하는 방식으로 시도하거나(pragmatic approach), 
+    // 아래 쿼리는 컬럼이 없을 때만 성공하도록 작성할 수는 없으므로 
+    // 에러를 무시하는 방식으로 처리합니다.
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN access_list_id INTEGER").execute(&pool).await;
 
     // Locations (경로별 라우팅) 테이블 생성
     sqlx::query(
@@ -44,12 +55,95 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .execute(&pool)
     .await?;
 
-    // 마이그레이션: rewrite 컬럼이 없을 경우 추가 (기존 DB 호환성)
-    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN rewrite BOOLEAN NOT NULL DEFAULT 0")
-        .execute(&pool)
-        .await;
+    // Stream (TCP/UDP) 테이블 생성
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS streams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listen_port INTEGER NOT NULL UNIQUE,
+            forward_host TEXT NOT NULL,
+            forward_port INTEGER NOT NULL,
+            protocol TEXT NOT NULL DEFAULT 'tcp'
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
 
-    // 인증서 테이블 생성
+    // Access Lists 테이블
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS access_lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    // Access List Clients (Basic Auth)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS access_list_clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            list_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            FOREIGN KEY(list_id) REFERENCES access_lists(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    // Access List IPs (Allow/Deny)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS access_list_ips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            list_id INTEGER NOT NULL,
+            ip_address TEXT NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('allow', 'deny')),
+            FOREIGN KEY(list_id) REFERENCES access_lists(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    // Headers (Custom Headers)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS headers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            host_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            value TEXT NOT NULL,
+            target TEXT NOT NULL CHECK(target IN ('request', 'response')),
+            FOREIGN KEY(host_id) REFERENCES hosts(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    // Custom Certs
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS custom_certs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL UNIQUE,
+            cert_path TEXT NOT NULL,
+            key_path TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    // 기존 인증서 테이블 (Let's Encrypt 용)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS certs (
@@ -93,9 +187,9 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 인덱스 추가 (조회 속도 향상)
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_traffic_stats_timestamp ON traffic_stats (timestamp);")
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_traffic_stats_timestamp ON traffic_stats (timestamp);")
         .execute(&pool)
-        .await?;
+        .await;
 
     Ok(pool)
 }
@@ -106,6 +200,10 @@ pub struct HostRow {
     pub domain: String,
     pub target: String,
     pub scheme: String,
+    pub ssl_forced: bool,
+    pub redirect_to: Option<String>,
+    pub redirect_status: i64,
+    pub access_list_id: Option<i64>,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -118,14 +216,56 @@ pub struct LocationRow {
     pub rewrite: bool,
 }
 
-/// 모든 호스트 목록 조회
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct StreamRow {
+    pub id: i64,
+    pub listen_port: i64,
+    pub forward_host: String,
+    pub forward_port: i64,
+    pub protocol: String,
+}
+
+// --- Access List Structs ---
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct AccessListRow {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct AccessListClientRow {
+    pub id: i64,
+    pub list_id: i64,
+    pub username: String,
+    pub password_hash: String,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct AccessListIpRow {
+    pub id: i64,
+    pub list_id: i64,
+    pub ip_address: String,
+    pub action: String, // 'allow' or 'deny'
+}
+
+// --- Headers Structs ---
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct HeaderRow {
+    pub id: i64,
+    pub host_id: i64,
+    pub name: String,
+    pub value: String,
+    pub target: String, // 'request' or 'response'
+}
+
+// --- DB Access Functions ---
+
 pub async fn get_all_hosts(pool: &DbPool) -> Result<Vec<HostRow>, sqlx::Error> {
     sqlx::query_as::<_, HostRow>("SELECT * FROM hosts")
         .fetch_all(pool)
         .await
 }
 
-/// 호스트 ID 조회 (도메인으로)
 pub async fn get_host_id(pool: &DbPool, domain: &str) -> Result<Option<i64>, sqlx::Error> {
     let row = sqlx::query_as::<_, (i64,)>("SELECT id FROM hosts WHERE domain = ?")
         .bind(domain)
@@ -134,31 +274,72 @@ pub async fn get_host_id(pool: &DbPool, domain: &str) -> Result<Option<i64>, sql
     Ok(row.map(|r| r.0))
 }
 
-/// 모든 로케이션 목록 조회
 pub async fn get_all_locations(pool: &DbPool) -> Result<Vec<LocationRow>, sqlx::Error> {
     sqlx::query_as::<_, LocationRow>("SELECT * FROM locations")
         .fetch_all(pool)
         .await
 }
 
-/// 호스트 추가 (이미 존재하면 업데이트)
-pub async fn upsert_host(pool: &DbPool, domain: &str, target: &str, scheme: &str) -> Result<(), sqlx::Error> {
+pub async fn get_all_streams(pool: &DbPool) -> Result<Vec<StreamRow>, sqlx::Error> {
+    sqlx::query_as::<_, StreamRow>("SELECT * FROM streams")
+        .fetch_all(pool)
+        .await
+}
+
+// New Access List Functions
+pub async fn get_all_access_lists(pool: &DbPool) -> Result<Vec<AccessListRow>, sqlx::Error> {
+    sqlx::query_as::<_, AccessListRow>("SELECT * FROM access_lists").fetch_all(pool).await
+}
+
+pub async fn get_access_list_clients(pool: &DbPool) -> Result<Vec<AccessListClientRow>, sqlx::Error> {
+    sqlx::query_as::<_, AccessListClientRow>("SELECT * FROM access_list_clients").fetch_all(pool).await
+}
+
+pub async fn get_access_list_ips(pool: &DbPool) -> Result<Vec<AccessListIpRow>, sqlx::Error> {
+    sqlx::query_as::<_, AccessListIpRow>("SELECT * FROM access_list_ips").fetch_all(pool).await
+}
+
+// New Headers Functions
+pub async fn get_all_headers(pool: &DbPool) -> Result<Vec<HeaderRow>, sqlx::Error> {
+    sqlx::query_as::<_, HeaderRow>("SELECT * FROM headers").fetch_all(pool).await
+}
+
+// 👇 [수정됨] access_list_id 인자 추가 및 쿼리 반영
+pub async fn upsert_host(
+    pool: &DbPool, 
+    domain: &str, 
+    target: &str, 
+    scheme: &str, 
+    ssl_forced: bool,
+    redirect_to: Option<String>,
+    redirect_status: i64,
+    access_list_id: Option<i64>, // Added
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO hosts (domain, target, scheme)
-        VALUES (?, ?, ?)
-        ON CONFLICT(domain) DO UPDATE SET target = excluded.target, scheme = excluded.scheme
+        INSERT INTO hosts (domain, target, scheme, ssl_forced, redirect_to, redirect_status, access_list_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(domain) DO UPDATE SET 
+            target = excluded.target, 
+            scheme = excluded.scheme,
+            ssl_forced = excluded.ssl_forced,
+            redirect_to = excluded.redirect_to,
+            redirect_status = excluded.redirect_status,
+            access_list_id = excluded.access_list_id
         "#,
     )
     .bind(domain)
     .bind(target)
     .bind(scheme)
+    .bind(ssl_forced)
+    .bind(redirect_to)
+    .bind(redirect_status)
+    .bind(access_list_id) // Added bind
     .execute(pool)
     .await?;
     Ok(())
 }
 
-/// 호스트 삭제
 pub async fn delete_host(pool: &DbPool, domain: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM hosts WHERE domain = ?")
         .bind(domain)
@@ -167,16 +348,13 @@ pub async fn delete_host(pool: &DbPool, domain: &str) -> Result<(), sqlx::Error>
     Ok(())
 }
 
-/// 로케이션 추가 (기존 경로 있으면 덮어쓰기 - DELETE 후 INSERT)
 pub async fn upsert_location(pool: &DbPool, host_id: i64, path: &str, target: &str, scheme: &str, rewrite: bool) -> Result<(), sqlx::Error> {
-    // 기존 동일 경로 제거
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
         .bind(host_id)
         .bind(path)
         .execute(pool)
         .await?;
 
-    // 새 경로 추가
     sqlx::query(
         "INSERT INTO locations (host_id, path, target, scheme, rewrite) VALUES (?, ?, ?, ?, ?)"
     )
@@ -190,11 +368,44 @@ pub async fn upsert_location(pool: &DbPool, host_id: i64, path: &str, target: &s
     Ok(())
 }
 
-/// 로케이션 삭제
 pub async fn delete_location(pool: &DbPool, host_id: i64, path: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
         .bind(host_id)
         .bind(path)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn upsert_stream(
+    pool: &DbPool,
+    listen_port: i64,
+    forward_host: &str,
+    forward_port: i64,
+    protocol: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO streams (listen_port, forward_host, forward_port, protocol)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(listen_port) DO UPDATE SET 
+            forward_host = excluded.forward_host,
+            forward_port = excluded.forward_port,
+            protocol = excluded.protocol
+        "#,
+    )
+    .bind(listen_port)
+    .bind(forward_host)
+    .bind(forward_port)
+    .bind(protocol)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_stream(pool: &DbPool, listen_port: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM streams WHERE listen_port = ?")
+        .bind(listen_port)
         .execute(pool)
         .await?;
     Ok(())
@@ -231,7 +442,6 @@ pub async fn get_cert(pool: &DbPool, domain: &str) -> Result<Option<CertRow>, sq
         .await
 }
 
-/// 만료 시간이 주어진 시간(timestamp)보다 작은 인증서 조회
 pub async fn get_expiring_certs(pool: &DbPool, threshold: i64) -> Result<Vec<String>, sqlx::Error> {
     let rows = sqlx::query_as::<_, CertRow>("SELECT * FROM certs WHERE expires_at < ?")
         .bind(threshold)
@@ -244,7 +454,6 @@ pub async fn get_expiring_certs(pool: &DbPool, threshold: i64) -> Result<Vec<Str
 // --- Users ---
 
 pub async fn get_user(pool: &DbPool, username: &str) -> Result<Option<(i64, String)>, sqlx::Error> {
-    // (id, password_hash) 반환
     sqlx::query_as::<_, (i64, String)>("SELECT id, password_hash FROM users WHERE username = ?")
         .bind(username)
         .fetch_optional(pool)
@@ -273,7 +482,6 @@ pub struct TrafficStatRow {
     pub status_5xx: i64,
 }
 
-/// 통계 저장
 pub async fn insert_traffic_stat(
     pool: &DbPool,
     timestamp: i64,
@@ -300,7 +508,6 @@ pub async fn insert_traffic_stat(
     Ok(())
 }
 
-/// 통계 조회 (최근 N분/시간)
 pub async fn get_traffic_stats(pool: &DbPool, start_ts: i64, end_ts: i64) -> Result<Vec<TrafficStatRow>, sqlx::Error> {
     sqlx::query_as::<_, TrafficStatRow>(
         "SELECT * FROM traffic_stats WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC"
@@ -309,4 +516,62 @@ pub async fn get_traffic_stats(pool: &DbPool, start_ts: i64, end_ts: i64) -> Res
     .bind(end_ts)
     .fetch_all(pool)
     .await
+}
+
+// --- Access List DB Helpers ---
+
+// 👇 [수정됨] 이름 변경: insert_access_list -> create_access_list
+pub async fn create_access_list(pool: &DbPool, name: &str) -> Result<i64, sqlx::Error> {
+    let id = sqlx::query("INSERT INTO access_lists (name) VALUES (?)")
+        .bind(name)
+        .execute(pool)
+        .await?
+        .last_insert_rowid();
+    Ok(id)
+}
+
+pub async fn delete_access_list(pool: &DbPool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM access_lists WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn add_access_list_client(pool: &DbPool, list_id: i64, username: &str, password_hash: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO access_list_clients (list_id, username, password_hash) VALUES (?, ?, ?)")
+        .bind(list_id)
+        .bind(username)
+        .bind(password_hash)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn remove_access_list_client(pool: &DbPool, list_id: i64, username: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM access_list_clients WHERE list_id = ? AND username = ?")
+        .bind(list_id)
+        .bind(username)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn add_access_list_ip(pool: &DbPool, list_id: i64, ip: &str, action: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO access_list_ips (list_id, ip_address, action) VALUES (?, ?, ?)")
+        .bind(list_id)
+        .bind(ip)
+        .bind(action)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn remove_access_list_ip(pool: &DbPool, list_id: i64, ip: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM access_list_ips WHERE list_id = ? AND ip_address = ?")
+        .bind(list_id)
+        .bind(ip)
+        .execute(pool)
+        .await?;
+    Ok(())
 }

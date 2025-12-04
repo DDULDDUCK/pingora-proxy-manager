@@ -13,7 +13,19 @@ export interface Host {
   domain: string;
   target: string;
   scheme: "http" | "https";
+  ssl_forced?: boolean;
+  redirect_to?: string | null;
+  redirect_status?: number;
   locations?: Location[];
+  access_list_id?: number | null;
+}
+
+export interface Stream {
+  id: number;
+  listen_port: number;
+  forward_host: string;
+  forward_port: number;
+  protocol: "tcp" | "udp";
 }
 
 export function useHosts() {
@@ -82,4 +94,39 @@ export function useIssueCert() {
         onSuccess: () => toast.success("Certificate request queued"),
         onError: () => toast.error("Failed to request certificate"),
     });
+}
+
+// --- Streams ---
+
+export function useStreams() {
+  return useQuery<Stream[]>({
+    queryKey: ["streams"],
+    queryFn: () => api.request("/streams"),
+  });
+}
+
+export function useAddStream() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (newStream: Partial<Stream>) => 
+      api.request("/streams", { method: "POST", body: JSON.stringify(newStream) }),
+    onSuccess: () => {
+      toast.success("Stream added");
+      queryClient.invalidateQueries({ queryKey: ["streams"] });
+    },
+    onError: () => toast.error("Failed to add stream"),
+  });
+}
+
+export function useDeleteStream() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (port: number) => 
+      api.request(`/streams/${port}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("Stream deleted");
+      queryClient.invalidateQueries({ queryKey: ["streams"] });
+    },
+    onError: () => toast.error("Failed to delete stream"),
+  });
 }
