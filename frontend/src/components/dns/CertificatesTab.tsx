@@ -35,10 +35,11 @@ import { toast } from "sonner";
 const PROVIDER_TEMPLATES: Record<string, string> = {
   cloudflare: "dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN",
   route53: `[default]
-aws_access_key_id=YOUR_ACCESS_KEY_ID
-aws_secret_access_key=YOUR_SECRET_ACCESS_KEY`,
-  google: `google_cloud_dns_key_file = /path/to/your/service-account.json`,
-  digitalocean: "dns_digitalocean_token = YOUR_DIGITALOCEAN_TOKEN",
+aws_access_key_id = YOUR_ACCESS_KEY_ID
+aws_secret_access_key = YOUR_SECRET_ACCESS_KEY
+# aws_session_token = YOUR_SESSION_TOKEN (Optional, for temporary credentials)`,
+  google: `google_cloud_dns_service_account_json = { /* YOUR GCP SERVICE ACCOUNT JSON HERE */ }`, // Note: Certbot expects JSON content directly
+  digitalocean: "dns_digitalocean_api_token = YOUR_DIGITALOCEAN_API_TOKEN",
 };
 
 export function CertificatesTab() {

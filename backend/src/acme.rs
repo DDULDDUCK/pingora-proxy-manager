@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::path::Path;
 use tokio::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::os::unix::fs::PermissionsExt; // Import for setting file permissions
 
 pub struct AcmeManager {
     state: Arc<AppState>,
@@ -24,18 +25,16 @@ impl AcmeManager {
     pub async fn request_certificate(&self, domain: &str, provider_id: Option<i64>) -> Result<(), Box<dyn Error>> {
         tracing::info!("🔐 Requesting certificate for {} via Certbot", domain);
 
-        // 1. Prepare Certbot Arguments
-        let mut args = vec![
-            "certonly".to_string(),
-            "-d".to_string(),
-            domain.to_string(),
-            "--email".to_string(),
-            self.contact_email.clone(),
-            "--agree-tos".to_string(),
-            "--non-interactive".to_string(),
-        ];
+        let mut cmd = Command::new("certbot");
 
-        // Temp file path holder to ensure we can delete it later
+        // Common Certbot arguments
+        cmd.arg("certonly")
+            .arg("-d").arg(domain)
+            .arg("--email").arg(&self.contact_email)
+            .arg("--agree-tos")
+            .arg("--non-interactive");
+
+        // Temp file path holder for credentials, to ensure it's deleted
         let mut credentials_file_path: Option<String> = None;
 
         if let Some(pid) = provider_id {
@@ -50,11 +49,9 @@ impl AcmeManager {
             let temp_path = format!("/tmp/dns-creds-{}-{}.ini", provider.provider_type, now);
             
             // Write credentials to file
-            // Ensure the content is trimmed and valid INI format
             fs::write(&temp_path, provider.credentials.trim()).await?;
             
-            // Set permissions to 600 (required by Certbot plugins)
-            use std::os::unix::fs::PermissionsExt;
+            // Set permissions to 600 (required by Certbot DNS plugins)
             let mut perms = fs::metadata(&temp_path).await?.permissions();
             perms.set_mode(0o600);
             fs::set_permissions(&temp_path, perms).await?;
@@ -64,33 +61,22 @@ impl AcmeManager {
             // Add provider-specific arguments
             match provider.provider_type.as_str() {
                 "cloudflare" => {
-                    args.push("--dns-cloudflare".to_string());
-                    args.push("--dns-cloudflare-credentials".to_string());
-                    args.push(temp_path);
-                    // Optional: propagation seconds
-                    args.push("--dns-cloudflare-propagation-seconds".to_string());
-                    args.push("30".to_string());
+                    cmd.arg("--dns-cloudflare")
+                        .arg("--dns-cloudflare-credentials").arg(&temp_path)
+                        .arg("--dns-cloudflare-propagation-seconds").arg("30");
                 },
                 "route53" => {
-                    args.push("--dns-route53".to_string());
-                    // Route53 plugin typically uses AWS env vars or ~/.aws/config, 
-                    // but can technically take a config file if we set AWS_CONFIG_FILE env var.
-                    // For simplicity here, we assume the plugin might use standard AWS setup, 
-                    // or we implement a more complex env var injection wrapper later.
-                    // BUT, certbot-dns-route53 doesn't have a simple --credentials flag like Cloudflare.
-                    // It usually relies on environment variables.
-                    // For now, let's warn if it's not fully supported in this generic implementation.
-                    tracing::warn!("⚠️ Route53 support is experimental. Ensure AWS credentials are set in environment.");
+                    cmd.arg("--dns-route53")
+                       .env("AWS_SHARED_CREDENTIALS_FILE", &temp_path); // Use env var for Route53
+                    tracing::warn!("⚠️ Route53: AWS credentials loaded from temp file via environment variable. Ensure file content is in AWS credentials format.");
                 },
                 "digitalocean" => {
-                    args.push("--dns-digitalocean".to_string());
-                    args.push("--dns-digitalocean-credentials".to_string());
-                    args.push(temp_path);
+                    cmd.arg("--dns-digitalocean")
+                        .arg("--dns-digitalocean-credentials").arg(&temp_path);
                 },
                 "google" => {
-                    args.push("--dns-google".to_string());
-                    args.push("--dns-google-credentials".to_string());
-                    args.push(temp_path);
+                    cmd.arg("--dns-google")
+                        .arg("--dns-google-credentials").arg(&temp_path);
                 },
                 _ => {
                     return Err(format!("Unsupported provider type: {}", provider.provider_type).into());
@@ -103,18 +89,13 @@ impl AcmeManager {
             let webroot_path = "/app/data/acme-challenge";
             fs::create_dir_all(webroot_path).await?;
             
-            args.push("--webroot".to_string());
-            args.push("-w".to_string());
-            args.push(webroot_path.to_string());
+            cmd.arg("--webroot")
+                .arg("-w").arg(webroot_path);
         }
 
         // 2. Execute Certbot
-        tracing::info!("🚀 Running Certbot: certbot {}", args.join(" "));
+        tracing::info!("🚀 Running Certbot command for {}", domain);
         
-        // Note: Command::new doesn't take Vec directly for args, so we iterate
-        let mut cmd = Command::new("certbot");
-        cmd.args(&args);
-
         // Capture output
         let output = cmd.output()?; // Blocking call (consider tokio::process::Command in pure async app)
 
@@ -132,20 +113,16 @@ impl AcmeManager {
         tracing::info!("✅ Certbot finished successfully.");
 
         // 4. Locate and Copy Certificates
-        // Certbot saves to /etc/letsencrypt/live/<domain>/
-        // Note: If domain contains wildcards (*.example.com), the cert directory name might be 'example.com'
-        // We need to handle this mapping. Certbot usually names the dir after the first domain (-d).
-        // Since we pass only one domain, it should match.
-        // BUT for wildcard '*.example.com', the dir is usually 'example.com'.
-        // Let's try to find the directory.
         let clean_domain = domain.replace("*.", "");
-        let cert_base_path = Path::new("/etc/letsencrypt/live").join(&clean_domain);
+        let cert_base_path_exact = Path::new("/etc/letsencrypt/live").join(domain);
+        let cert_base_path_wildcard = Path::new("/etc/letsencrypt/live").join(&clean_domain);
         
-        // If not found, try exact domain match (just in case)
-        let cert_base_path = if !cert_base_path.exists() {
-             Path::new("/etc/letsencrypt/live").join(domain)
+        let cert_base_path = if cert_base_path_exact.exists() {
+            cert_base_path_exact
+        } else if cert_base_path_wildcard.exists() {
+            cert_base_path_wildcard
         } else {
-            cert_base_path
+            return Err(format!("Certificates directory not found for {} at {:?} or {:?}", domain, cert_base_path_exact, cert_base_path_wildcard).into());
         };
 
         let privkey_path = cert_base_path.join("privkey.pem");
@@ -161,7 +138,6 @@ impl AcmeManager {
             fs::create_dir_all(local_cert_dir).await?;
         }
 
-        // Use the original requested domain name for our local filename to match DB
         let local_key_path = local_cert_dir.join(format!("{}.key", domain));
         let local_cert_path = local_cert_dir.join(format!("{}.crt", domain));
 

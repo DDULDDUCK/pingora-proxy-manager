@@ -48,6 +48,9 @@ RUN apt-get update && apt-get install -y \
     openssl \
     certbot \
     python3-certbot-dns-cloudflare \
+    python3-certbot-dns-route53 \
+    python3-certbot-dns-digitalocean \
+    python3-certbot-dns-google \
     && rm -rf /var/lib/apt/lists/*
 
 # 실행 파일 복사
