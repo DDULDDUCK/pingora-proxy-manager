@@ -187,10 +187,10 @@ fn main() {
                 let renewal_threshold = now + 30 * 24 * 60 * 60; 
 
                 match db::get_expiring_certs(&pool_for_acme, renewal_threshold).await {
-                    Ok(domains) => {
-                        for domain in domains {
-                            tracing::info!("♻️ Renewing certificate for {}", domain);
-                            if let Err(e) = acme_manager.request_certificate(&domain).await {
+                    Ok(certs) => {
+                        for (domain, provider_id) in certs {
+                            tracing::info!("♻️ Renewing certificate for {} (Provider: {:?})", domain, provider_id);
+                            if let Err(e) = acme_manager.request_certificate(&domain, provider_id).await {
                                 tracing::error!("❌ Failed to renew certificate for {}: {}", domain, e);
                             }
                         }

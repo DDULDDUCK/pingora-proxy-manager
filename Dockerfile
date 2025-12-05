@@ -40,8 +40,15 @@ RUN cargo build --release --bin backend
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# 필수 패키지 설치 (SSL 인증서 등)
-RUN apt-get update && apt-get install -y ca-certificates openssl && rm -rf /var/lib/apt/lists/*
+# 필수 패키지 설치 (SSL 인증서, Certbot 및 DNS 플러그인)
+# python3-certbot-dns-cloudflare: Cloudflare DNS용 플러그인
+# 필요에 따라 python3-certbot-dns-route53 (AWS), python3-certbot-dns-google 등 추가 가능
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    openssl \
+    certbot \
+    python3-certbot-dns-cloudflare \
+    && rm -rf /var/lib/apt/lists/*
 
 # 실행 파일 복사
 COPY --from=backend-builder /app/target/release/backend /app/pingora-pm
@@ -49,8 +56,8 @@ COPY --from=backend-builder /app/target/release/backend /app/pingora-pm
 # 프론트엔드 빌드 결과물 복사
 COPY --from=frontend-builder /app/frontend/dist /app/static
 
-# 데이터 저장소 디렉토리 생성
-RUN mkdir -p /app/data
+# 데이터 저장소 및 Certbot 디렉토리 생성
+RUN mkdir -p /app/data /etc/letsencrypt
 
 # 포트 노출 (8080: 프록시, 81: 관리자 UI)
 EXPOSE 8080 81

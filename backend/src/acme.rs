@@ -1,15 +1,11 @@
 use crate::db::{self, DbPool};
 use crate::state::AppState;
-use instant_acme::{Account, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus, RetryPolicy};
 use std::error::Error;
+use std::process::Command;
 use std::sync::Arc;
 use std::path::Path;
 use tokio::fs;
-
-// Production (실제 인증서)
-const LETS_ENCRYPT_PRODUCTION_URL: &str = "https://acme-v02.api.letsencrypt.org/directory";
-// Staging (테스트용)
-// const LETS_ENCRYPT_STAGING_URL: &str = "https://acme-staging-v02.api.letsencrypt.org/directory";
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct AcmeManager {
     state: Arc<AppState>,
@@ -22,88 +18,168 @@ impl AcmeManager {
         Self { state, db_pool, contact_email: email }
     }
 
-    pub async fn request_certificate(&self, domain: &str) -> Result<(), Box<dyn Error>> {
-        tracing::info!("🔐 Requesting certificate for {}", domain);
+    /// Requests a certificate using Certbot CLI.
+    /// If `provider_id` is provided, uses DNS-01 challenge.
+    /// Otherwise, defaults to HTTP-01 challenge using --webroot.
+    pub async fn request_certificate(&self, domain: &str, provider_id: Option<i64>) -> Result<(), Box<dyn Error>> {
+        tracing::info!("🔐 Requesting certificate for {} via Certbot", domain);
 
-        // 1. 계정 생성
-        let (account, _) = Account::builder()? 
-            .create(
-                &NewAccount {
-                    contact: &[&format!("mailto:{}", self.contact_email)],
-                    terms_of_service_agreed: true,
-                    only_return_existing: false,
-                },
-                LETS_ENCRYPT_PRODUCTION_URL.to_string(),
-                None,
-            )
-            .await?;
+        // 1. Prepare Certbot Arguments
+        let mut args = vec![
+            "certonly".to_string(),
+            "-d".to_string(),
+            domain.to_string(),
+            "--email".to_string(),
+            self.contact_email.clone(),
+            "--agree-tos".to_string(),
+            "--non-interactive".to_string(),
+        ];
 
-        // 2. 주문 생성
-        let mut order = account
-            .new_order(&NewOrder::new(&[Identifier::Dns(domain.to_string())]))
-            .await?;
+        // Temp file path holder to ensure we can delete it later
+        let mut credentials_file_path: Option<String> = None;
 
-        // 3. Authorizations 처리 (Challenge 설정)
-        let mut auths = order.authorizations();
-        while let Some(auth_result) = auths.next().await {
-            let mut auth = auth_result?;
+        if let Some(pid) = provider_id {
+            // --- DNS-01 Challenge ---
+            let provider = db::get_dns_provider(&self.db_pool, pid).await?
+                .ok_or("DNS Provider not found")?;
             
-            if let Some(mut challenge) = auth.challenge(ChallengeType::Http01) {
-                let token = challenge.token.to_string();
-                let key_auth = challenge.key_authorization();
-                let key_auth_str = key_auth.as_str();
+            tracing::info!("👉 Using DNS Provider: {} ({})", provider.name, provider.provider_type);
 
-                tracing::info!("📝 Setting ACME challenge: {} -> {}", token, key_auth_str);
-                self.state.add_acme_challenge(token.clone(), key_auth_str.to_string());
+            // Create temporary credentials file
+            let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+            let temp_path = format!("/tmp/dns-creds-{}-{}.ini", provider.provider_type, now);
+            
+            // Write credentials to file
+            // Ensure the content is trimmed and valid INI format
+            fs::write(&temp_path, provider.credentials.trim()).await?;
+            
+            // Set permissions to 600 (required by Certbot plugins)
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&temp_path).await?.permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(&temp_path, perms).await?;
 
-                // Let's Encrypt에게 검증 요청
-                challenge.set_ready().await?;
+            credentials_file_path = Some(temp_path.clone());
+
+            // Add provider-specific arguments
+            match provider.provider_type.as_str() {
+                "cloudflare" => {
+                    args.push("--dns-cloudflare".to_string());
+                    args.push("--dns-cloudflare-credentials".to_string());
+                    args.push(temp_path);
+                    // Optional: propagation seconds
+                    args.push("--dns-cloudflare-propagation-seconds".to_string());
+                    args.push("30".to_string());
+                },
+                "route53" => {
+                    args.push("--dns-route53".to_string());
+                    // Route53 plugin typically uses AWS env vars or ~/.aws/config, 
+                    // but can technically take a config file if we set AWS_CONFIG_FILE env var.
+                    // For simplicity here, we assume the plugin might use standard AWS setup, 
+                    // or we implement a more complex env var injection wrapper later.
+                    // BUT, certbot-dns-route53 doesn't have a simple --credentials flag like Cloudflare.
+                    // It usually relies on environment variables.
+                    // For now, let's warn if it's not fully supported in this generic implementation.
+                    tracing::warn!("⚠️ Route53 support is experimental. Ensure AWS credentials are set in environment.");
+                },
+                "digitalocean" => {
+                    args.push("--dns-digitalocean".to_string());
+                    args.push("--dns-digitalocean-credentials".to_string());
+                    args.push(temp_path);
+                },
+                "google" => {
+                    args.push("--dns-google".to_string());
+                    args.push("--dns-google-credentials".to_string());
+                    args.push(temp_path);
+                },
+                _ => {
+                    return Err(format!("Unsupported provider type: {}", provider.provider_type).into());
+                }
             }
+
+        } else {
+            // --- HTTP-01 Challenge ---
+            tracing::info!("👉 Using HTTP-01 (Webroot)");
+            let webroot_path = "/app/data/acme-challenge";
+            fs::create_dir_all(webroot_path).await?;
+            
+            args.push("--webroot".to_string());
+            args.push("-w".to_string());
+            args.push(webroot_path.to_string());
         }
 
-        // 4. 검증 대기 (Order Ready 상태 될 때까지)
-        let state = order.poll_ready(&RetryPolicy::new()).await?;
-        if state != OrderStatus::Ready {
-            return Err(format!("Order failed to become ready: {:?}", state).into());
-        }
-
-        // 5. Finalize (Private Key 생성 및 CSR 전송)
-        tracing::info!("🔑 Generating Private Key and Finalizing Order...");
-        let private_key_pem = order.finalize().await?;
-
-        // 6. 인증서 다운로드 대기
-        tracing::info!("⬇️ Downloading Certificate...");
-        let cert_chain_pem = order.poll_certificate(&RetryPolicy::new()).await?;
-
-        // 7. 인증서 저장 (파일 시스템 & DB)
-        let cert_dir = Path::new("data/certs");
-        if !cert_dir.exists() {
-            fs::create_dir_all(cert_dir).await?;
-        }
-
-        let key_path = cert_dir.join(format!("{}.key", domain));
-        let cert_path = cert_dir.join(format!("{}.crt", domain));
-
-        fs::write(&key_path, &private_key_pem).await?;
-        fs::write(&cert_path, &cert_chain_pem).await?;
+        // 2. Execute Certbot
+        tracing::info!("🚀 Running Certbot: certbot {}", args.join(" "));
         
-        tracing::info!("💾 Certificates saved to {:?}", cert_dir);
+        // Note: Command::new doesn't take Vec directly for args, so we iterate
+        let mut cmd = Command::new("certbot");
+        cmd.args(&args);
 
-        // 8. DB에 만료일 업데이트
-        // 인증서 파싱해서 만료일 알아내야 함 (x509-parser 사용)
-        // 여기서는 간단히 현재시간 + 90일로 가정하거나, 실제 파싱 로직 추가
-        // x509-parser가 있으므로 파싱 시도
-        if let Ok((_, pem)) = x509_parser::pem::parse_x509_pem(cert_chain_pem.as_bytes()) {
+        // Capture output
+        let output = cmd.output()?; // Blocking call (consider tokio::process::Command in pure async app)
+
+        // 3. Cleanup Credentials File
+        if let Some(path) = credentials_file_path {
+            let _ = fs::remove_file(path).await; // Ignore deletion errors
+        }
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!("❌ Certbot failed: {}", stderr);
+            return Err(format!("Certbot failed: {}", stderr).into());
+        }
+
+        tracing::info!("✅ Certbot finished successfully.");
+
+        // 4. Locate and Copy Certificates
+        // Certbot saves to /etc/letsencrypt/live/<domain>/
+        // Note: If domain contains wildcards (*.example.com), the cert directory name might be 'example.com'
+        // We need to handle this mapping. Certbot usually names the dir after the first domain (-d).
+        // Since we pass only one domain, it should match.
+        // BUT for wildcard '*.example.com', the dir is usually 'example.com'.
+        // Let's try to find the directory.
+        let clean_domain = domain.replace("*.", "");
+        let cert_base_path = Path::new("/etc/letsencrypt/live").join(&clean_domain);
+        
+        // If not found, try exact domain match (just in case)
+        let cert_base_path = if !cert_base_path.exists() {
+             Path::new("/etc/letsencrypt/live").join(domain)
+        } else {
+            cert_base_path
+        };
+
+        let privkey_path = cert_base_path.join("privkey.pem");
+        let fullchain_path = cert_base_path.join("fullchain.pem");
+
+        if !privkey_path.exists() || !fullchain_path.exists() {
+            return Err(format!("Certificates not found at {:?}", cert_base_path).into());
+        }
+
+        // 5. Copy certificates to our local data directory
+        let local_cert_dir = Path::new("data/certs");
+        if !local_cert_dir.exists() {
+            fs::create_dir_all(local_cert_dir).await?;
+        }
+
+        // Use the original requested domain name for our local filename to match DB
+        let local_key_path = local_cert_dir.join(format!("{}.key", domain));
+        let local_cert_path = local_cert_dir.join(format!("{}.crt", domain));
+
+        fs::copy(&privkey_path, &local_key_path).await?;
+        fs::copy(&fullchain_path, &local_cert_path).await?;
+
+        tracing::info!("💾 Certificates copied to {:?}", local_cert_dir);
+
+        // 6. Update Database with Expiration Date
+        let cert_content = fs::read(&local_cert_path).await?;
+        if let Ok((_, pem)) = x509_parser::pem::parse_x509_pem(&cert_content) {
              if let Ok(cert) = pem.parse_x509() {
                  let expires_at = cert.validity().not_after.timestamp();
-                 db::upsert_cert(&self.db_pool, domain, expires_at).await?;
+                 db::upsert_cert(&self.db_pool, domain, expires_at, provider_id).await?;
                  tracing::info!("📅 Certificate expiration updated in DB: {}", expires_at);
              }
         }
 
-        tracing::info!("✅ Certificate issued successfully for {}!", domain);
-        
         Ok(())
     }
 }
-

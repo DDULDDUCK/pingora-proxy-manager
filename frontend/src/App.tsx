@@ -23,6 +23,7 @@ import { SettingsTab } from "@/components/dashboard/SettingsTab";
 import { AccessListsTab } from "@/components/access/AccessListsTab";
 import { UsersTab } from "@/components/users/UsersTab";
 import { AuditLogsTab } from "@/components/audit/AuditLogsTab";
+import { CertificatesTab } from "@/components/dns/CertificatesTab";
 import { useCurrentUser, type User } from "@/hooks/useUsers";
 import { api } from "@/lib/api";
 import ppnIcon from '@/assets/ppnicon.png';
@@ -201,6 +202,7 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
               <TabsTrigger value="hosts">Hosts</TabsTrigger>
               <TabsTrigger value="streams">Streams</TabsTrigger>
               <TabsTrigger value="access">Access Lists</TabsTrigger>
+              {canManageHosts && <TabsTrigger value="certs">Certificates</TabsTrigger>} {/* Added Tab */}
               {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
               <TabsTrigger value="audit">Audit Logs</TabsTrigger>
               {canManageHosts && <TabsTrigger value="logs">Logs</TabsTrigger>}
@@ -222,6 +224,12 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
             <TabsContent value="access" className="space-y-4">
               <AccessListsTab />
             </TabsContent>
+
+            {canManageHosts && (
+              <TabsContent value="certs" className="space-y-4">
+                <CertificatesTab />
+              </TabsContent>
+            )} {/* Added Content */}
 
             {isAdmin && (
               <TabsContent value="users" className="space-y-4">

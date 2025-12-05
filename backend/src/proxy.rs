@@ -9,6 +9,8 @@ use bytes::Bytes;
 use std::time::Duration;
 use crate::auth; 
 use base64::{Engine as _, engine::general_purpose};
+use tokio::fs;
+use std::path::Path;
 
 pub struct DynamicProxy {
     pub state: Arc<AppState>,
@@ -36,21 +38,34 @@ impl ProxyHttp for DynamicProxy {
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         let path = session.req_header().uri.path();
         
-        // 1. ACME Challenge 처리
+        // 1. ACME Challenge 처리 (File System Based for Certbot)
         if path.starts_with("/.well-known/acme-challenge/") {
             let token = path.trim_start_matches("/.well-known/acme-challenge/");
-            if let Some(key_auth) = self.state.get_acme_challenge(token) {
-                let mut header = ResponseHeader::build(200, Some(4)).unwrap();
-                header.insert_header("Content-Type", "text/plain").unwrap();
-                let body_bytes = Bytes::from(key_auth);
-                header.insert_header("Content-Length", body_bytes.len().to_string()).unwrap();
-                
-                session.write_response_header(Box::new(header), false).await?;
-                session.write_response_body(Some(body_bytes), true).await?;
-                return Ok(true); 
-            } else {
-                let _ = session.respond_error(404).await;
-                return Ok(true);
+            
+            // Certbot이 --webroot 모드로 실행될 때 파일을 생성하는 위치
+            let file_path = Path::new("/app/data/acme-challenge").join(token);
+            
+            // Path Traversal 방지: token에 '..'가 포함되어 있는지 간단히 체크
+            if token.contains("..") {
+                 let _ = session.respond_error(403).await;
+                 return Ok(true);
+            }
+
+            match fs::read(&file_path).await {
+                Ok(content) => {
+                    let mut header = ResponseHeader::build(200, Some(4)).unwrap();
+                    header.insert_header("Content-Type", "text/plain").unwrap();
+                    header.insert_header("Content-Length", content.len().to_string()).unwrap();
+                    
+                    session.write_response_header(Box::new(header), false).await?;
+                    session.write_response_body(Some(Bytes::from(content)), true).await?;
+                    return Ok(true); 
+                }
+                Err(_) => {
+                    // 파일이 없으면 404
+                    let _ = session.respond_error(404).await;
+                    return Ok(true);
+                }
             }
         }
 
