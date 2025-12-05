@@ -1,5 +1,11 @@
-# 🚀 Pingora Proxy Manager
 
+
+# Pingora Proxy Manager
+<p align="center">
+  <!-- 프로젝트 로고를 여기에 추가할 수 있습니다. -->
+  <img width="150" height="150" alt="ppnicon-removebg-preview" src="https://github.com/user-attachments/assets/3c9ec9cd-02f6-4a96-85e8-c125adb628cb" />
+  <br>
+</p>
 <div align="center">
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
