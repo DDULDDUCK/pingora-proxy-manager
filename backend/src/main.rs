@@ -55,7 +55,7 @@ fn main() {
 
     rt.block_on(async move {
         // 2. DB 초기화
-        let db_url = "sqlite:data.db?mode=rwc";
+        let db_url = "sqlite:data/data.db?mode=rwc";
         let pool = db::init_db(db_url).await.expect("Failed to init DB");
         
         // 초기 관리자 계정 생성 (없으면)
