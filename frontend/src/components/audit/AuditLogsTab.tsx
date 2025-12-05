@@ -76,7 +76,7 @@ const resourceTypeLabels: Record<string, string> = {
 };
 
 function formatTimestamp(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleString("ko-KR", {
+  return new Date(timestamp * 1000).toLocaleString(undefined, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
