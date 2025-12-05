@@ -10,7 +10,7 @@
 
 **A high-performance, zero-downtime reverse proxy manager built on Cloudflare's [Pingora](https://github.com/cloudflare/pingora).**
 
-Simple, Modern, and Fast.
+Simple, Modern, and Fast. Now supports Wildcard SSL & TCP/UDP Streams!
 
 </div>
 
@@ -20,22 +20,68 @@ Simple, Modern, and Fast.
 
 - **⚡️ High Performance:** Built on Rust & Pingora, capable of handling high traffic with low latency.
 - **🔄 Zero-Downtime Configuration:** Dynamic reconfiguration without restarting the process.
-- **🔒 Automatic SSL/TLS:** Automated certificate issuance and renewal via Let's Encrypt (ACME).
+- **🔒 SSL/TLS Automation:** 
+  - **HTTP-01:** Standard challenge for single domains.
+  - **DNS-01:** **Wildcard certificate support** (`*.example.com`) via Cloudflare, AWS Route53, etc. (powered by Certbot).
+- **🌐 Proxy Hosts:** Easy management of virtual hosts, locations, and path rewriting.
+- **📡 Streams (L4):** TCP and UDP forwarding for databases, game servers, etc.
+- **🛡️ Access Control:** IP whitelisting/blacklisting and Basic Authentication support.
 - **🎨 Modern Dashboard:** Clean and responsive UI built with React, Tailwind CSS, and shadcn/ui.
-- **🔐 Secure:** Built-in authentication, JWT protection, and secure password hashing.
 - **🐳 Docker Ready:** Single container deployment for easy setup and maintenance.
-
-## 📸 Screenshots
-
-*(Add your screenshots here)*
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### Quick Start (Docker Hub)
 
-- Docker & Docker Compose installed on your machine.
+You can run the pre-built image directly from Docker Hub.
 
-### Installation
+**Using Docker CLI:**
+```bash
+docker run -d \
+  --name pingora-proxy \
+  -p 80:8080 \
+  -p 81:81 \
+  -v ./data:/app/data \
+  -v ./logs:/app/logs \
+  dduldduck/pingora-proxy-manager:latest
+```
+
+**Using Docker Compose:**
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  pingora-proxy:
+    image: dduldduck/pingora-proxy-manager:latest
+    container_name: pingora-proxy
+    restart: always
+    ports:
+      - "80:8080"   # HTTP Proxy (Backend listens on 8080)
+      - "81:81"     # Dashboard/API (Backend listens on 81)
+      # Map 443 if you want to serve HTTPS directly (requires privilege or capability)
+      # - "443:443" 
+    volumes:
+      - ./data:/app/data        # DB and Certs persistence
+      - ./logs:/app/logs        # Logs persistence
+    environment:
+      - JWT_SECRET=changeme_in_production_please
+      - RUST_LOG=info
+```
+
+Then run:
+```bash
+docker compose up -d
+```
+
+### Access the Dashboard
+- Open your browser and go to `http://localhost:81`.
+- **Default Credentials:**
+  - Username: `admin`
+  - Password: `changeme` (Please change this immediately!)
+
+## 🛠️ Building from Source
+
+If you want to build the image yourself:
 
 1. **Clone the repository:**
    ```bash
@@ -43,27 +89,22 @@ Simple, Modern, and Fast.
    cd pingora-proxy-manager
    ```
 
-2. **Start with Docker Compose:**
+2. **Build and Start:**
    ```bash
    docker compose up --build -d
    ```
 
-3. **Access the Dashboard:**
-   - Open your browser and go to `http://localhost:81`.
-   - **Default Credentials:**
-     - Email/Username: `admin`
-     - Password: `changeme`
+## 🏗️ Architecture
 
-## 🛠️ Architecture
-
-- **Data Plane (80/443):** [Pingora](https://github.com/cloudflare/pingora) handles all traffic with high efficiency.
+- **Data Plane (8080/443):** [Pingora](https://github.com/cloudflare/pingora) handles all traffic with high efficiency.
 - **Control Plane (81):** [Axum](https://github.com/tokio-rs/axum) serves the API and Dashboard.
+- **SSL Management:** Integrated `Certbot` for robust ACME handling.
 - **State Management:** `ArcSwap` for lock-free configuration reads.
 - **Database:** SQLite for persistent storage of hosts and certificates.
 
 ## 📦 Development
 
-If you want to run it locally without Docker:
+To run locally without Docker (requires Rust and Node.js):
 
 **Backend:**
 ```bash
