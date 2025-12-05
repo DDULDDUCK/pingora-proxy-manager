@@ -34,6 +34,10 @@ Simple, Modern, and Fast. Now supports Wildcard SSL & TCP/UDP Streams!
 - **🛡️ Access Control:** IP whitelisting/blacklisting and Basic Authentication support.
 - **🎨 Modern Dashboard:** Clean and responsive UI built with React, Tailwind CSS, and shadcn/ui.
 - **🐳 Docker Ready:** Single container deployment for easy setup and maintenance.
+<img width="1302" height="724" alt="image" src="https://github.com/user-attachments/assets/aeb84f5a-5db8-4f8a-94cc-d355301907f4" />
+<img width="1301" height="707" alt="image" src="https://github.com/user-attachments/assets/62add77b-a909-4ffb-8102-3b57c2007c3b" />
+<img width="1289" height="637" alt="image" src="https://github.com/user-attachments/assets/9d0e3a07-f79a-4f45-9fe3-d97ae9867fef" />
+<img width="1301" height="538" alt="image" src="https://github.com/user-attachments/assets/a1dfd699-492f-4218-8a23-579e9fdb17aa" />
 
 ## 🚀 Getting Started
 
