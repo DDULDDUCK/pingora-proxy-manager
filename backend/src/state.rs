@@ -27,6 +27,8 @@ pub struct HostConfig {
     #[serde(default = "default_redirect_status")]
     pub redirect_status: u16,
     pub access_list_id: Option<i64>,
+    #[serde(default)] // Add this line
+    pub headers: Vec<HeaderConfig>, // Add this line
 }
 
 fn default_redirect_status() -> u16 {
@@ -57,6 +59,7 @@ pub struct AccessListIpConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeaderConfig {
+    pub id: i64,
     pub name: String,
     pub value: String,
     pub target: String, // request/response
@@ -70,7 +73,7 @@ pub struct ProxyConfig {
     /// Access List ID -> Config
     #[serde(skip)]
     pub access_lists: HashMap<i64, AccessListConfig>,
-    /// Host ID -> Headers
+    /// Host ID -> Headers (for quick lookup in proxy)
     #[serde(skip)]
     pub headers: HashMap<i64, Vec<HeaderConfig>>,
 }
@@ -139,10 +142,11 @@ impl AppState {
         config.access_lists.get(&id).cloned()
     }
 
-    // Note: Host ID is not directly available from domain lookup in `get_host_config` currently without reverse lookup or changing HostConfig.
-    // For now, we will assume `proxy.rs` will look up headers if we expose them.
-    // But `ProxyConfig` maps Domain -> HostConfig. We need Host ID to look up headers in `headers` map.
-    // Let's add `id` to `HostConfig` struct as well to make this easier.
+    /// 특정 호스트 ID에 대한 헤더 목록을 조회합니다.
+    pub fn get_headers(&self, host_id: i64) -> Vec<HeaderConfig> {
+        let config = self.config.load();
+        config.headers.get(&host_id).cloned().unwrap_or_default()
+    }
     
     /// 설정을 통째로 교체합니다. (Atomic)
     pub fn update_config(&self, new_config: ProxyConfig) {
@@ -152,11 +156,5 @@ impl AppState {
     /// 에러 템플릿 업데이트
     pub fn update_error_template(&self, new_template: String) {
         self.error_template.store(Arc::new(new_template));
-    }
-
-    pub fn get_headers(&self, host_id: i64) -> Vec<HeaderConfig> {
-        let config = self.config.load();
-        // headers 맵에서 host_id로 조회, 없으면 빈 벡터 반환
-        config.headers.get(&host_id).cloned().unwrap_or_default()
     }
 }

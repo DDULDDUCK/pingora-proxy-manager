@@ -122,10 +122,11 @@ fn main() {
                 });
             }
 
-            // 3. Headers
-            let mut headers: HashMap<i64, Vec<crate::state::HeaderConfig>> = HashMap::new();
+            // 3. Headers (grouped by host_id for ProxyConfig)
+            let mut headers_map: HashMap<i64, Vec<crate::state::HeaderConfig>> = HashMap::new();
             for h in header_rows {
-                headers.entry(h.host_id).or_default().push(crate::state::HeaderConfig {
+                headers_map.entry(h.host_id).or_default().push(crate::state::HeaderConfig {
+                    id: h.id,
                     name: h.name,
                     value: h.value,
                     target: h.target,
@@ -135,6 +136,7 @@ fn main() {
             let mut hosts = HashMap::new();
             for row in rows {
                 let locs = locations_map.remove(&row.id).unwrap_or_default();
+                let host_headers = headers_map.get(&row.id).cloned().unwrap_or_default();
                 hosts.insert(row.domain, HostConfig {
                     id: row.id,
                     target: row.target,
@@ -144,9 +146,10 @@ fn main() {
                     redirect_to: row.redirect_to,
                     redirect_status: row.redirect_status as u16,
                     access_list_id: row.access_list_id,
+                    headers: host_headers,
                 });
             }
-            state_for_init.update_config(ProxyConfig { hosts, access_lists, headers });
+            state_for_init.update_config(ProxyConfig { hosts, access_lists, headers: headers_map });
             tracing::info!("✅ Initial configuration loaded from DB");
         } else {
             tracing::warn!("⚠️ Failed to load initial configuration from DB");

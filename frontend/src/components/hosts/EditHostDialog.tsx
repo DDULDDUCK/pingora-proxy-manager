@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Edit, RefreshCw, CornerDownRight, Trash2, Plus } from "lucide-react";
-import type { Host, Location } from "@/hooks/useHosts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Edit, RefreshCw, CornerDownRight, ArrowRightLeft, Trash2, Plus } from "lucide-react";
+import type { Host, Location, Header } from "@/hooks/useHosts";
 import { toast } from "sonner";
-import { useAddHost, useAddLocation, useDeleteLocation } from "@/hooks/useHosts";
+import { useAddHost, useAddLocation, useDeleteLocation, useAddHostHeader, useDeleteHostHeader } from "@/hooks/useHosts";
 import { useAccessLists } from "@/hooks/useAccessLists";
 
 interface EditHostDialogProps {
@@ -22,10 +23,13 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
   const addHostMutation = useAddHost();
   const addLocationMutation = useAddLocation();
   const deleteLocationMutation = useDeleteLocation();
+  const addHeaderMutation = useAddHostHeader();
+  const deleteHeaderMutation = useDeleteHostHeader();
   const { data: accessLists } = useAccessLists();
 
   const [editFormHost, setEditFormHost] = useState<Partial<Host>>({});
   const [newLocation, setNewLocation] = useState<Location>({ path: "/", target: "", scheme: "http", rewrite: false });
+  const [newHeader, setNewHeader] = useState<Omit<Header, 'id'>>({ name: "", value: "", target: "request" });
 
   useEffect(() => {
     if (host) {
@@ -35,7 +39,8 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
             ssl_forced: host.ssl_forced,
             redirect_to: host.redirect_to || "",
             redirect_status: host.redirect_status || 301,
-            access_list_id: host.access_list_id || null
+            access_list_id: host.access_list_id || null,
+            // headers is part of host, no need to set here for form values
         });
     }
   }, [host]);
@@ -72,6 +77,33 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
     deleteLocationMutation.mutate({ domain: host.domain, path });
   };
 
+  const handleAddHeader = () => {
+    if (!host || !newHeader.name || !newHeader.value) return toast.warning("Header name and value are required");
+    addHeaderMutation.mutate({ domain: host.domain, header: newHeader }, {
+        onSuccess: () => {
+            setNewHeader({ name: "", value: "", target: "request" });
+            toast.success("Header added successfully");
+        },
+        onError: (error) => {
+            toast.error(`Failed to add header: ${error.message}`);
+        }
+    });
+  };
+
+  const handleDeleteHeader = (headerId: number) => {
+    if (!host) return;
+    if (!confirm("Are you sure you want to delete this header?")) return;
+    deleteHeaderMutation.mutate({ domain: host.domain, headerId }, {
+        onSuccess: () => {
+            toast.success("Header deleted successfully");
+        },
+        onError: (error) => {
+            toast.error(`Failed to delete header: ${error.message}`);
+        }
+    });
+  };
+
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -81,14 +113,15 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
             Edit Host: {host?.domain}
           </DialogTitle>
           <DialogDescription>
-            Modify host settings and manage path-based routing
+            Modify host settings and manage path-based routing, and custom headers.
           </DialogDescription>
         </DialogHeader>
         
         <Tabs defaultValue="settings" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3"> {/* Changed to 3 columns */}
             <TabsTrigger value="settings">Host Settings</TabsTrigger>
             <TabsTrigger value="locations">Locations ({host?.locations?.length || 0})</TabsTrigger>
+            <TabsTrigger value="headers">Custom Headers ({host?.headers?.length || 0})</TabsTrigger> {/* New Tab */}
           </TabsList>
           
           {/* Host Settings Tab */}
@@ -133,7 +166,9 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
               />
               <Label htmlFor="edit_ssl_forced" className="cursor-pointer flex items-center">
                 Force SSL
-                <Badge variant="outline" className="ml-2 text-[10px] bg-yellow-50 text-yellow-700 border-yellow-200">HTTPS Only</Badge>
+                <Badge variant="outline" className="ml-2 text-[10px] bg-yellow-50 text-yellow-700 border-yellow-200">
+                  HTTPS Only
+                </Badge>
               </Label>
             </div>
 
@@ -221,7 +256,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                     <span className="font-mono text-sm">{loc.scheme}://{loc.target}</span>
                     {loc.rewrite && (
                       <Badge variant="secondary" className="text-[10px] bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-                        Stripped
+                        <ArrowRightLeft className="mr-1 h-3 w-3 inline" /> Stripped
                       </Badge>
                     )}
                   </div>
@@ -230,6 +265,79 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                   </Button>
                 </div>
               ))}
+            </div>
+          </TabsContent>
+
+          {/* Custom Headers Tab */}
+          <TabsContent value="headers" className="space-y-4 pt-4">
+            <div className="grid gap-4 border-b pb-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label>Header Name</Label>
+                        <Input 
+                            value={newHeader.name} 
+                            onChange={e => setNewHeader({...newHeader, name: e.target.value})} 
+                            placeholder="X-Custom-Header" 
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Header Value</Label>
+                        <Input 
+                            value={newHeader.value} 
+                            onChange={e => setNewHeader({...newHeader, value: e.target.value})} 
+                            placeholder="my-value" 
+                        />
+                    </div>
+                </div>
+                <div className="flex items-end gap-3">
+                    <div className="grid gap-2 w-[150px]">
+                        <Label>Target</Label>
+                        <Select 
+                            value={newHeader.target} 
+                            onValueChange={v => setNewHeader({...newHeader, target: v as "request" | "response"})}
+                        >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="request">Request</SelectItem>
+                                <SelectItem value="response">Response</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button className="ml-auto" onClick={handleAddHeader} disabled={addHeaderMutation.isPending}>
+                        <Plus className="h-4 w-4 mr-2" /> Add Header
+                    </Button>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Configured Headers</Label>
+                {host?.headers?.length === 0 && (
+                    <div className="text-sm text-muted-foreground italic">No custom headers configured.</div>
+                )}
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Value</TableHead>
+                            <TableHead>Target</TableHead>
+                            <TableHead className="w-[80px]">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {host?.headers?.map((header) => (
+                            <TableRow key={header.id}>
+                                <TableCell className="font-mono text-sm">{header.name}</TableCell>
+                                <TableCell className="font-mono text-sm">{header.value}</TableCell>
+                                <TableCell className="capitalize">{header.target}</TableCell>
+                                <TableCell>
+                                    <Button variant="ghost" size="sm" onClick={() => handleDeleteHeader(header.id)} disabled={deleteHeaderMutation.isPending}>
+                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
             </div>
           </TabsContent>
         </Tabs>

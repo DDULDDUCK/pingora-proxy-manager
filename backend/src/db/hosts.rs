@@ -1,4 +1,5 @@
 use super::DbPool;
+use crate::state::HeaderConfig;
 
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct HostRow {
@@ -51,8 +52,37 @@ pub async fn get_all_locations(pool: &DbPool) -> Result<Vec<LocationRow>, sqlx::
         .await
 }
 
+pub async fn get_headers_by_host_id(pool: &DbPool, host_id: i64) -> Result<Vec<HeaderRow>, sqlx::Error> {
+    sqlx::query_as::<_, HeaderRow>("SELECT * FROM headers WHERE host_id = ?")
+        .bind(host_id)
+        .fetch_all(pool)
+        .await
+}
+
 pub async fn get_all_headers(pool: &DbPool) -> Result<Vec<HeaderRow>, sqlx::Error> {
-    sqlx::query_as::<_, HeaderRow>("SELECT * FROM headers").fetch_all(pool).await
+    sqlx::query_as::<_, HeaderRow>("SELECT * FROM headers")
+        .fetch_all(pool)
+        .await
+}
+
+pub async fn add_header(pool: &DbPool, host_id: i64, name: &str, value: &str, target: &str) -> Result<i64, sqlx::Error> {
+    let id = sqlx::query("INSERT INTO headers (host_id, name, value, target) VALUES (?, ?, ?, ?)")
+        .bind(host_id)
+        .bind(name)
+        .bind(value)
+        .bind(target)
+        .execute(pool)
+        .await?
+        .last_insert_rowid();
+    Ok(id)
+}
+
+pub async fn delete_header(pool: &DbPool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM headers WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 pub async fn upsert_host(

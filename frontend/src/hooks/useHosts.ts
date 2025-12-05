@@ -9,6 +9,13 @@ export interface Location {
   rewrite?: boolean;
 }
 
+export interface Header {
+  id: number;
+  name: string;
+  value: string;
+  target: "request" | "response";
+}
+
 export interface Host {
   domain: string;
   target: string;
@@ -18,6 +25,7 @@ export interface Host {
   redirect_status?: number;
   locations?: Location[];
   access_list_id?: number | null;
+  headers?: Header[]; // Added headers field
 }
 
 export interface Stream {
@@ -87,13 +95,31 @@ export function useDeleteLocation() {
     });
 }
 
-export function useIssueCert() {
-    return useMutation({
-        mutationFn: ({ domain, email }: { domain: string, email: string }) =>
-            api.request("/certs", { method: "POST", body: JSON.stringify({ domain, email }) }),
-        onSuccess: () => toast.success("Certificate request queued"),
-        onError: () => toast.error("Failed to request certificate"),
-    });
+// New hooks for custom headers
+export function useAddHostHeader() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ domain, header }: { domain: string, header: Omit<Header, 'id'> }) =>
+      api.request(`/hosts/${domain}/headers`, { method: "POST", body: JSON.stringify(header) }),
+    onSuccess: () => {
+      toast.success("Header added");
+      queryClient.invalidateQueries({ queryKey: ["hosts"] });
+    },
+    onError: () => toast.error("Failed to add header"),
+  });
+}
+
+export function useDeleteHostHeader() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ domain, headerId }: { domain: string, headerId: number }) =>
+      api.request(`/hosts/${domain}/headers/${headerId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("Header deleted");
+      queryClient.invalidateQueries({ queryKey: ["hosts"] });
+    },
+    onError: () => toast.error("Failed to delete header"),
+  });
 }
 
 // --- Streams ---

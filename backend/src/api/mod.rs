@@ -51,6 +51,8 @@ pub fn router(
         .route("/hosts", get(list_hosts).post(add_host))
         .route("/hosts/{domain}", delete(delete_host_handler))
         .route("/hosts/{domain}/locations", post(add_location).delete(delete_location_handler))
+        .route("/hosts/{domain}/headers", get(list_host_headers).post(add_header_to_host))
+        .route("/hosts/{domain}/headers/{header_id}", delete(delete_host_header))
         // Certs
         .route("/certs", get(list_certs).post(request_cert))
         .route("/certs/upload", post(upload_cert))
@@ -144,10 +146,11 @@ pub(crate) async fn sync_state(state: &ApiState) {
             });
         }
 
-        // Headers
-        let mut headers: HashMap<i64, Vec<crate::state::HeaderConfig>> = HashMap::new();
+        // Headers (grouped by host_id for ProxyConfig)
+        let mut headers_map: HashMap<i64, Vec<crate::state::HeaderConfig>> = HashMap::new();
         for h in header_rows {
-            headers.entry(h.host_id).or_default().push(crate::state::HeaderConfig {
+            headers_map.entry(h.host_id).or_default().push(crate::state::HeaderConfig {
+                id: h.id,
                 name: h.name,
                 value: h.value,
                 target: h.target,
@@ -158,6 +161,7 @@ pub(crate) async fn sync_state(state: &ApiState) {
         let mut hosts = HashMap::new();
         for row in rows {
             let locs = locations_map.remove(&row.id).unwrap_or_default();
+            let host_headers = headers_map.get(&row.id).cloned().unwrap_or_default();
             hosts.insert(row.domain, HostConfig {
                 id: row.id,
                 target: row.target,
@@ -167,10 +171,11 @@ pub(crate) async fn sync_state(state: &ApiState) {
                 redirect_to: row.redirect_to,
                 redirect_status: row.redirect_status as u16,
                 access_list_id: row.access_list_id,
+                headers: host_headers,
             });
         }
         
-        state.app_state.update_config(ProxyConfig { hosts, access_lists, headers });
+        state.app_state.update_config(ProxyConfig { hosts, access_lists, headers: headers_map });
         tracing::info!("♻️ State synced with DB");
     } else {
         tracing::error!("❌ Failed to sync state from DB");

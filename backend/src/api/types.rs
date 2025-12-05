@@ -46,6 +46,7 @@ pub struct HostRes {
     pub redirect_status: u16,
     pub locations: Vec<LocationConfig>,
     pub access_list_id: Option<i64>,
+    pub headers: Vec<HeaderRes>, // Added headers field
 }
 
 #[derive(Deserialize)]
@@ -213,4 +214,20 @@ pub struct DnsProviderRes {
     pub name: String,
     pub provider_type: String,
     pub created_at: i64,
+}
+
+// --- Custom Header Structs ---
+#[derive(Deserialize)]
+pub struct CreateHeaderReq {
+    pub name: String,
+    pub value: String,
+    pub target: String, // "request" or "response"
+}
+
+#[derive(Serialize)]
+pub struct HeaderRes {
+    pub id: i64,
+    pub name: String,
+    pub value: String,
+    pub target: String,
 }

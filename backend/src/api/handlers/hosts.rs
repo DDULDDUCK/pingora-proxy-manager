@@ -2,7 +2,7 @@ use axum::{
     extract::{State, Json, Query, Path as AxumPath},
     http::StatusCode,
 };
-use crate::api::{ApiState, types::{CreateHostReq, HostRes, CreateLocationReq, DeleteLocationQuery}, sync_state};
+use crate::api::{ApiState, types::{CreateHostReq, HostRes, CreateLocationReq, DeleteLocationQuery, HeaderRes, CreateHeaderReq}, sync_state};
 use crate::auth::Claims;
 use crate::db;
 
@@ -21,6 +21,12 @@ pub async fn list_hosts(
             redirect_status: c.redirect_status,
             locations: c.locations.clone(),
             access_list_id: c.access_list_id,
+            headers: c.headers.iter().map(|h| HeaderRes { // Map to HeaderRes
+                id: h.id,
+                name: h.name.clone(),
+                value: h.value.clone(),
+                target: h.target.clone(),
+            }).collect(),
         })
         .collect();
     Json(res)
@@ -188,6 +194,90 @@ pub async fn delete_location_handler(
         "location",
         Some(&format!("{}:{}", domain, q.path)),
         Some(&format!("Deleted location {} from host {}", q.path, domain)),
+        None,
+    ).await;
+    
+    sync_state(&state).await;
+    StatusCode::OK
+}
+
+pub async fn list_host_headers(
+    _: Claims,
+    State(state): State<ApiState>,
+    AxumPath(domain): AxumPath<String>,
+) -> Result<Json<Vec<HeaderRes>>, StatusCode> {
+    let hosts = state.app_state.config.load();
+    let host_config = hosts.hosts.get(&domain).ok_or(StatusCode::NOT_FOUND)?;
+    
+    Ok(Json(host_config.headers.iter().map(|h| HeaderRes {
+        id: h.id,
+        name: h.name.clone(),
+        value: h.value.clone(),
+        target: h.target.clone(),
+    }).collect()))
+}
+
+pub async fn add_header_to_host(
+    claims: Claims,
+    State(state): State<ApiState>,
+    AxumPath(domain): AxumPath<String>,
+    Json(payload): Json<CreateHeaderReq>,
+) -> StatusCode {
+    if !claims.can_manage_hosts() {
+        return StatusCode::FORBIDDEN;
+    }
+
+    let host_id = match db::get_host_id(&state.db_pool, &domain).await {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+    };
+
+    if let Err(e) = db::add_header(&state.db_pool, host_id, &payload.name, &payload.value, &payload.target).await {
+        tracing::error!("DB Error adding header: {}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    let _ = db::insert_audit_log(
+        &state.db_pool,
+        &claims.sub,
+        Some(claims.user_id),
+        "add",
+        "header",
+        Some(&format!("{}:{}", domain, payload.name)),
+        Some(&format!("Added header '{}: {}' to host {}", payload.name, payload.value, domain)),
+        None,
+    ).await;
+
+    sync_state(&state).await;
+    StatusCode::CREATED
+}
+
+pub async fn delete_host_header(
+    claims: Claims,
+    State(state): State<ApiState>,
+    AxumPath((domain, header_id)): AxumPath<(String, i64)>,
+) -> StatusCode {
+    if !claims.can_manage_hosts() {
+        return StatusCode::FORBIDDEN;
+    }
+
+    // Note: We don't strictly need host_id here for deletion,
+    // but a check could be added if headers should only be deletable by their parent host.
+    // For now, directly delete by header_id.
+    if let Err(e) = db::delete_header(&state.db_pool, header_id).await {
+        tracing::error!("DB Error deleting header: {}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    let _ = db::insert_audit_log(
+        &state.db_pool,
+        &claims.sub,
+        Some(claims.user_id),
+        "delete",
+        "header",
+        Some(&format!("{}:{}", domain, header_id)),
+        Some(&format!("Deleted header ID {} from host {}", header_id, domain)),
         None,
     ).await;
     
