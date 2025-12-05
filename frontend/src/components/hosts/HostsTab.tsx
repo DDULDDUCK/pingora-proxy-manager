@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
-import { useHosts, useDeleteHost, useIssueCert } from "@/hooks/useHosts";
+import { useHosts, useDeleteHost } from "@/hooks/useHosts";
+import { useCertificates } from "@/hooks/useCertificates";
 import { useAuth } from "@/App";
 import type { Host } from "@/hooks/useHosts";
 import { Button } from "@/components/ui/button";
@@ -11,17 +12,20 @@ import {
 import { HostsTable } from "./HostsTable";
 import { AddHostDialog } from "./AddHostDialog";
 import { EditHostDialog } from "./EditHostDialog";
+import { IssueCertDialog } from "./IssueCertDialog";
 
 export function HostsTab() {
   const { canManageHosts } = useAuth();
   const { data: hosts, isLoading, refetch } = useHosts();
+  const { certs } = useCertificates();
   const deleteHostMutation = useDeleteHost();
-  const issueCertMutation = useIssueCert();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isCertOpen, setIsCertOpen] = useState(false);
   const [editingHost, setEditingHost] = useState<Host | null>(null);
+  const [certDomain, setCertDomain] = useState<string | null>(null);
 
   const handleDeleteHost = (domain: string) => {
     if (!confirm(`Delete ${domain}?`)) return;
@@ -29,7 +33,8 @@ export function HostsTab() {
   };
 
   const handleIssueCert = (domain: string) => {
-    issueCertMutation.mutate({ domain, email: "admin@example.com" });
+    setCertDomain(domain);
+    setIsCertOpen(true);
   };
 
   const openEdit = (host: Host) => {
@@ -68,6 +73,7 @@ export function HostsTab() {
        <CardContent>
           <HostsTable 
             hosts={filteredHosts} 
+            certs={certs}
             canManageHosts={canManageHosts} 
             onEdit={openEdit} 
             onIssueCert={handleIssueCert} 
@@ -79,6 +85,12 @@ export function HostsTab() {
          host={editingHost} 
          open={isEditOpen} 
          onOpenChange={setIsEditOpen} 
+       />
+
+       <IssueCertDialog
+         domain={certDomain}
+         open={isCertOpen}
+         onOpenChange={setIsCertOpen}
        />
     </Card>
   );
