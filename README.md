@@ -1,8 +1,7 @@
 
-
 # Pingora Proxy Manager
 <p align="center">
-  <!-- 프로젝트 로고를 여기에 추가할 수 있습니다. -->
+  <!-- 프로젝트 로고 -->
   <img width="150" height="150" alt="ppnicon-removebg-preview" src="https://github.com/user-attachments/assets/3c9ec9cd-02f6-4a96-85e8-c125adb628cb" />
   <br>
 </p>
@@ -13,6 +12,9 @@
 ![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
+<a href="https://www.buymeacoffee.com/dduldduck">
+  <img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange.svg?style=for-the-badge&logo=buymeacoffee" alt="Donate" />
+</a>
 
 **A high-performance, zero-downtime reverse proxy manager built on Cloudflare's [Pingora](https://github.com/cloudflare/pingora).**
 
@@ -38,6 +40,21 @@ Simple, Modern, and Fast. Now supports Wildcard SSL & TCP/UDP Streams!
 <img width="1301" height="707" alt="image" src="https://github.com/user-attachments/assets/62add77b-a909-4ffb-8102-3b57c2007c3b" />
 <img width="1289" height="637" alt="image" src="https://github.com/user-attachments/assets/9d0e3a07-f79a-4f45-9fe3-d97ae9867fef" />
 <img width="1301" height="538" alt="image" src="https://github.com/user-attachments/assets/a1dfd699-492f-4218-8a23-579e9fdb17aa" />
+
+## ❤️ Support the Development
+
+**Is Pingora Proxy Manager saving you time?**
+
+This project is built with love, caffeine, and many sleepless nights to provide a high-performance, free alternative for the community. Maintaining an open-source project takes significant effort. 
+
+If you'd like to support the ongoing development, bug fixes, and new features, please consider buying me a coffee! ☕️
+
+<div align="center">
+  <a href="https://www.buymeacoffee.com/dduldduck" target="_blank">
+    <img width="400" alt="Buy Me A Coffee" src="https://github.com/user-attachments/assets/120ade05-f821-4a0a-913a-03b6532ce77b" />
+  </a>
+  <p><i>Your support keeps the code flowing.</i></p>
+</div>
 
 ## 🚀 Getting Started
 
