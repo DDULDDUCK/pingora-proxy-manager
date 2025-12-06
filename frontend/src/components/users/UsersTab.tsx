@@ -125,7 +125,7 @@ export function UsersTab() {
     try {
       await deleteUser.mutateAsync(user.id);
       toast.success(t('users.userDeleted'));
-    } catch (e) {
+    } catch {
       toast.error("Failed to delete user");
     }
   };
