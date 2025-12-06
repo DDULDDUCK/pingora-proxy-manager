@@ -93,6 +93,9 @@ function IssuedCertificates() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/purity
+  const now = Math.floor(Date.now() / 1000);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -185,8 +188,6 @@ function IssuedCertificates() {
               </TableRow>
             ) : (
               certs.map((cert) => {
-                // eslint-disable-next-line react-hooks/purity
-                const now = Math.floor(Date.now() / 1000);
                 const daysLeft = Math.floor((cert.expires_at - now) / 86400);
                 const isExpired = daysLeft < 0;
                 const isWarning = daysLeft < 30;
