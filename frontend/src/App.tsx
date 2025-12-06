@@ -25,7 +25,7 @@ import { AccessListsTab } from "@/components/access/AccessListsTab";
 import { UsersTab } from "@/components/users/UsersTab";
 import { AuditLogsTab } from "@/components/audit/AuditLogsTab";
 import { CertificatesTab } from "@/components/dns/CertificatesTab";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { useCurrentUser, type User } from "@/hooks/useUsers";
 import { api } from "@/lib/api";
 import ppnIcon from '@/assets/ppnicon.png';
