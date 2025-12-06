@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useHosts, useDeleteHost } from "@/hooks/useHosts";
 import { useCertificates } from "@/hooks/useCertificates";
 import { useAuth } from "@/App";
@@ -15,6 +16,7 @@ import { EditHostDialog } from "./EditHostDialog";
 import { IssueCertDialog } from "./IssueCertDialog";
 
 export function HostsTab() {
+  const { t } = useTranslation();
   const { canManageHosts } = useAuth();
   const { data: hosts, isLoading, refetch } = useHosts();
   const { certs } = useCertificates();
@@ -28,7 +30,7 @@ export function HostsTab() {
   const [certDomain, setCertDomain] = useState<string | null>(null);
 
   const handleDeleteHost = (domain: string) => {
-    if (!confirm(`Delete ${domain}?`)) return;
+    if (!confirm(t('hosts.deleteConfirm', { domain }))) return;
     deleteHostMutation.mutate(domain);
   };
 
@@ -51,12 +53,12 @@ export function HostsTab() {
        <CardHeader className="pb-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <CardTitle>Proxy Hosts</CardTitle>
-                <CardDescription>Manage your routing and redirection rules.</CardDescription>
+                <CardTitle>{t('hosts.title')}</CardTitle>
+                <CardDescription>{t('hosts.description')}</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Input
-                  placeholder="Search domains..."
+                  placeholder={t('hosts.searchDomains')}
                   className="w-[200px]"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
