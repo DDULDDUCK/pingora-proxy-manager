@@ -169,7 +169,9 @@
     "userUpdated": "Utente \"{{username}}\" aggiornato con successo",
     "userDeleted": "Utente eliminato con successo",
     "createUserFailed": "Impossibile creare l'utente",
-    "updateUserFailed": "Impossibile aggiornare l'utente"
+    "updateUserFailed": "Impossibile aggiornare l'utente",
+    "deleteUserFailed": "Impossibile eliminare l'utente",
+    "noChangesToSave": "Nessuna modifica da salvare"
   },
   "audit": {
     "title": "Log di controllo",
@@ -178,7 +180,8 @@
     "user": "Utente",
     "action": "Azione",
     "details": "Dettagli",
-    "system": "Sistema"
+    "system": "Sistema",
+    "resource": "Risorsa"
   },
   "logs": {
     "title": "Log del server",
@@ -197,6 +200,8 @@
     "save": "Salva impostazioni",
     "saveSuccess": "Impostazioni salvate con successo",
     "saveError": "Impossibile salvare le impostazioni",
+    "loadError": "Impossibile caricare la pagina di errore",
+    "updateError": "Impossibile aggiornare la pagina di errore",
     "apply": "Applica configurazione",
     "applySuccess": "Configurazione applicata con successo",
     "applyError": "Impossibile applicare la configurazione"
@@ -218,6 +223,8 @@
     "enabled": "Abilitato",
     "disabled": "Disabilitato",
     "yes": "Sì",
-    "no": "No"
+    "no": "No",
+    "apply": "Applica",
+    "clear": "Cancella"
   }
 }

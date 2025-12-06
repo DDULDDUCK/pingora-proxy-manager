@@ -101,7 +101,7 @@ export function UsersTab() {
     if (editRole && editRole !== editingUser.role) data.role = editRole;
 
     if (Object.keys(data).length === 0) {
-      toast.info("No changes to save");
+      toast.info(t('users.noChangesToSave'));
       return;
     }
 
@@ -126,7 +126,7 @@ export function UsersTab() {
       await deleteUser.mutateAsync(user.id);
       toast.success(t('users.userDeleted'));
     } catch {
-      toast.error("Failed to delete user");
+      toast.error(t('users.deleteUserFailed'));
     }
   };
 

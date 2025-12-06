@@ -135,7 +135,7 @@ export function AuditLogsTab() {
             disabled={isFetching}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-            Refresh
+            {t('common.refresh')}
           </Button>
         </div>
 
@@ -170,10 +170,10 @@ export function AuditLogsTab() {
           <div className="flex items-end gap-2">
             <Button onClick={applyFilters}>
               <Filter className="mr-2 h-4 w-4" />
-              Apply
+              {t('common.apply')}
             </Button>
             <Button variant="outline" onClick={clearFilters}>
-              Clear
+              {t('common.clear')}
             </Button>
           </div>
         </div>
@@ -192,7 +192,7 @@ export function AuditLogsTab() {
                   <TableHead className="w-[180px]">{t('audit.timestamp')}</TableHead>
                   <TableHead>{t('audit.user')}</TableHead>
                   <TableHead>{t('audit.action')}</TableHead>
-                  <TableHead>Resource</TableHead>
+                  <TableHead>{t('audit.resource')}</TableHead>
                   <TableHead>{t('audit.details')}</TableHead>
                 </TableRow>
               </TableHeader>

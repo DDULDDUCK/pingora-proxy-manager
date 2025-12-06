@@ -169,7 +169,9 @@
     "userUpdated": "User \"{{username}}\" updated successfully",
     "userDeleted": "User deleted successfully",
     "createUserFailed": "Failed to create user",
-    "updateUserFailed": "Failed to update user"
+    "updateUserFailed": "Failed to update user",
+    "deleteUserFailed": "Failed to delete user",
+    "noChangesToSave": "No changes to save"
   },
   "audit": {
     "title": "Audit Logs",
@@ -178,7 +180,8 @@
     "user": "User",
     "action": "Action",
     "details": "Details",
-    "system": "System"
+    "system": "System",
+    "resource": "Resource"
   },
   "logs": {
     "title": "Server Logs",
@@ -197,6 +200,8 @@
     "save": "Save Settings",
     "saveSuccess": "Settings saved successfully",
     "saveError": "Failed to save settings",
+    "loadError": "Failed to load error page",
+    "updateError": "Failed to update error page",
     "apply": "Apply Configuration",
     "applySuccess": "Configuration applied successfully",
     "applyError": "Failed to apply configuration"
@@ -218,6 +223,8 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "apply": "Apply",
+    "clear": "Clear"
   }
 }

@@ -22,7 +22,7 @@ export function SettingsTab() {
       const content = await api.request("/settings/error-page");
       setHtml(content || "");
     } catch {
-      toast.error("Failed to load error page");
+      toast.error(t('settings.loadError'));
     } finally {
       setLoading(false);
     }
@@ -37,7 +37,7 @@ export function SettingsTab() {
       });
       toast.success("Error page updated");
     } catch {
-      toast.error("Failed to update error page");
+      toast.error(t('settings.updateError'));
     } finally {
       setLoading(false);
     }
