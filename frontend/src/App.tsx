@@ -1,5 +1,6 @@
 import { useState, createContext, useContext } from "react";
 import { Toaster, toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   Lock, LogOut, Loader2
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { AccessListsTab } from "@/components/access/AccessListsTab";
 import { UsersTab } from "@/components/users/UsersTab";
 import { AuditLogsTab } from "@/components/audit/AuditLogsTab";
 import { CertificatesTab } from "@/components/dns/CertificatesTab";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useCurrentUser, type User } from "@/hooks/useUsers";
 import { api } from "@/lib/api";
 import ppnIcon from '@/assets/ppnicon.png';
@@ -55,6 +57,7 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  const { t } = useTranslation();
   const [token, setToken] = useState<string | null>(api.getToken());
   
   // Login State
@@ -76,12 +79,12 @@ function App() {
         const data = await res.json();
         api.setToken(data.token);
         setToken(data.token);
-        toast.success(`Welcome back, ${loginId}!`);
+        toast.success(t('login.welcomeBack', { username: loginId }));
       } else {
-        toast.error("Invalid credentials.");
+        toast.error(t('login.invalidCredentials'));
       }
-    } catch (err) {
-      toast.error("Login server error.");
+    } catch {
+      toast.error(t('login.serverError'));
     } finally {
       setLoginLoading(false);
     }
@@ -90,25 +93,28 @@ function App() {
   const handleLogout = () => {
     api.removeToken();
     setToken(null);
-    toast.info("Logged out successfully");
+    toast.info(t('login.loggedOut'));
   };
 
   if (!token) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
         <Toaster position="top-center" />
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher />
+        </div>
         <Card className="w-full max-w-sm shadow-lg">
           <CardHeader className="text-center">
             <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit mb-2">
               <Lock className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle className="text-xl">Pingora Manager</CardTitle>
-            <CardDescription>Sign in to manage your proxy</CardDescription>
+            <CardTitle className="text-xl">{t('app.title')}</CardTitle>
+            <CardDescription>{t('app.subtitle')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">{t('login.username')}</Label>
                 <Input 
                   id="username" 
                   value={loginId} 
@@ -117,7 +123,7 @@ function App() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('login.password')}</Label>
                 <Input 
                   id="password" 
                   type="password" 
@@ -127,7 +133,7 @@ function App() {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loginLoading}>
-                {loginLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Sign In"}
+                {loginLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('login.signIn')}
               </Button>
             </form>
           </CardContent>
@@ -147,6 +153,7 @@ function App() {
 // --- Main Layout Component ---
 
 function MainLayout({ onLogout }: { onLogout: () => void }) {
+  const { t } = useTranslation();
   const { data: user, isLoading: userLoading } = useCurrentUser();
   
   const isAdmin = user?.role === "admin";
@@ -171,14 +178,15 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
               </div>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                  Pingora Proxy Manager
+                  {t('app.mainTitle')}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  High performance Rust-based proxy engine
+                  {t('app.mainSubtitle')}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <LanguageSwitcher />
               {user && (
                 <div className="flex items-center gap-2 mr-2">
                   <span className="text-sm text-slate-500 hidden md:inline">
@@ -190,7 +198,7 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
                 </div>
               )}
               <Button variant="outline" size="sm" onClick={onLogout}>
-                <LogOut className="mr-2 h-4 w-4" /> Logout
+                <LogOut className="mr-2 h-4 w-4" /> {t('app.logout')}
               </Button>
             </div>
           </div>
@@ -198,15 +206,15 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
           {/* Tabs Navigation */}
           <Tabs defaultValue="dashboard" className="space-y-4">
             <TabsList className="flex flex-wrap">
-              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-              <TabsTrigger value="hosts">Hosts</TabsTrigger>
-              <TabsTrigger value="streams">Streams</TabsTrigger>
-              <TabsTrigger value="access">Access Lists</TabsTrigger>
-              {canManageHosts && <TabsTrigger value="certs">Certificates</TabsTrigger>} {/* Added Tab */}
-              {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
-              <TabsTrigger value="audit">Audit Logs</TabsTrigger>
-              {canManageHosts && <TabsTrigger value="logs">Logs</TabsTrigger>}
-              {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
+              <TabsTrigger value="dashboard">{t('tabs.dashboard')}</TabsTrigger>
+              <TabsTrigger value="hosts">{t('tabs.hosts')}</TabsTrigger>
+              <TabsTrigger value="streams">{t('tabs.streams')}</TabsTrigger>
+              <TabsTrigger value="access">{t('tabs.accessLists')}</TabsTrigger>
+              {canManageHosts && <TabsTrigger value="certs">{t('tabs.certificates')}</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="users">{t('tabs.users')}</TabsTrigger>}
+              <TabsTrigger value="audit">{t('tabs.auditLogs')}</TabsTrigger>
+              {canManageHosts && <TabsTrigger value="logs">{t('tabs.logs')}</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="settings">{t('tabs.settings')}</TabsTrigger>}
             </TabsList>
             
             <TabsContent value="dashboard" className="space-y-4">

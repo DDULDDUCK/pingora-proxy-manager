@@ -1,4 +1,5 @@
 import { Activity, HardDrive, ShieldCheck, AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   AreaChart,
@@ -12,6 +13,7 @@ import {
 import { useRealtimeStats, useHistoryStats } from "@/hooks/useStats";
 
 export function DashboardTab() {
+  const { t } = useTranslation();
   const { data: realtime } = useRealtimeStats();
   const { data: history } = useHistoryStats();
 
@@ -28,43 +30,43 @@ export function DashboardTab() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.totalRequests')}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{realtime?.requests.toLocaleString() ?? "-"}</div>
             <p className="text-xs text-muted-foreground">
-              Since last restart
+              {t('dashboard.sinceRestart')}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Data Transfer</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.dataTransfer')}</CardTitle>
             <HardDrive className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatBytes(realtime?.bytes ?? 0)}</div>
             <p className="text-xs text-muted-foreground">
-              Total bandwidth usage
+              {t('dashboard.totalBandwidth')}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Success Rate (2xx)</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.successRate')}</CardTitle>
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{realtime?.status_2xx.toLocaleString() ?? "-"}</div>
             <p className="text-xs text-muted-foreground">
-              Successful responses
+              {t('dashboard.successfulResponses')}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Errors (4xx/5xx)</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.errors')}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -72,7 +74,7 @@ export function DashboardTab() {
               {((realtime?.status_4xx ?? 0) + (realtime?.status_5xx ?? 0)).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-               Client or Server errors
+              {t('dashboard.clientServerErrors')}
             </p>
           </CardContent>
         </Card>
@@ -80,8 +82,8 @@ export function DashboardTab() {
 
       <Card className="col-span-4">
         <CardHeader>
-          <CardTitle>Traffic Overview</CardTitle>
-          <CardDescription>Requests per minute over the last 24 hours</CardDescription>
+          <CardTitle>{t('dashboard.trafficOverview')}</CardTitle>
+          <CardDescription>{t('dashboard.requestsPerMinute')}</CardDescription>
         </CardHeader>
         <CardContent className="pl-2">
           <div className="h-[300px]">
