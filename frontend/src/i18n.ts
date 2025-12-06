@@ -5,6 +5,10 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.json';
 import it from './locales/it.json';
 
+/**
+ * i18n configuration for Pingora Proxy Manager
+ * Supports English and Italian languages
+ */
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -18,9 +22,25 @@ i18n
       }
     },
     fallbackLng: 'en',
+    supportedLngs: ['en', 'it'],
+    
+    // Language detection configuration
+    detection: {
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
+      lookupLocalStorage: 'i18nextLng',
+    },
+    
+    // Disable debug in production
     debug: false,
+    
     interpolation: {
-      escapeValue: false
+      escapeValue: false // React already escapes values
+    },
+    
+    // React specific options
+    react: {
+      useSuspense: false
     }
   });
 
