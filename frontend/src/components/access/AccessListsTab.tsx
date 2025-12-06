@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { RefreshCw, Plus, Trash2, User, Globe, Shield, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAccessLists, useAddAccessList, useDeleteAccessList, useAddClient, useRemoveClient, useAddIp, useRemoveIp } from "@/hooks/useAccessLists";
 import { useAuth } from "@/App";
 import type { AccessList } from "@/hooks/useAccessLists";
@@ -23,6 +24,7 @@ import {
 import { toast } from "sonner";
 
 export function AccessListsTab() {
+  const { t } = useTranslation();
   const { canManageHosts } = useAuth();
   const { data: accessLists, isLoading, refetch } = useAccessLists();
   const addListMutation = useAddAccessList();
@@ -46,7 +48,7 @@ export function AccessListsTab() {
   const [newIpAction, setNewIpAction] = useState<"allow" | "deny">("allow");
 
   const handleAddList = () => {
-    if (!newListName) return toast.warning("Name required");
+    if (!newListName) return toast.warning(t('access.nameRequired'));
     addListMutation.mutate(newListName, {
         onSuccess: () => {
             setIsAddOpen(false);
@@ -56,7 +58,7 @@ export function AccessListsTab() {
   };
 
   const handleDeleteList = (id: number) => {
-      if (!confirm("Delete this access list?")) return;
+      if (!confirm(t('access.deleteConfirm'))) return;
       deleteListMutation.mutate(id);
   };
 
@@ -66,7 +68,7 @@ export function AccessListsTab() {
   };
 
   const handleAddClient = () => {
-      if (!editingList || !newClientUser || !newClientPass) return toast.warning("Username and Password required");
+      if (!editingList || !newClientUser || !newClientPass) return toast.warning(t('access.usernamePasswordRequired'));
       addClientMutation.mutate({ id: editingList.id, client: { username: newClientUser, password: newClientPass } }, {
           onSuccess: () => {
               setNewClientUser("");
@@ -87,7 +89,7 @@ export function AccessListsTab() {
   };
 
   const handleAddIp = () => {
-      if (!editingList || !newIp) return toast.warning("IP Address required");
+      if (!editingList || !newIp) return toast.warning(t('access.ipAddressRequired'));
       addIpMutation.mutate({ id: editingList.id, ipRule: { ip: newIp, action: newIpAction } }, {
           onSuccess: () => {
               setNewIp("");
@@ -108,8 +110,8 @@ export function AccessListsTab() {
        <CardHeader className="pb-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <CardTitle>Access Lists</CardTitle>
-                <CardDescription>Manage IP whitelists/blacklists and Basic Auth users.</CardDescription>
+                <CardTitle>{t('access.title')}</CardTitle>
+                <CardDescription>{t('access.description')}</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
@@ -117,21 +119,21 @@ export function AccessListsTab() {
                 </Button>
                 {canManageHosts && (
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                  <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Add Access List</Button></DialogTrigger>
+                  <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> {t('access.addList')}</Button></DialogTrigger>
                   <DialogContent>
-                    <DialogHeader><DialogTitle>New Access List</DialogTitle>
+                    <DialogHeader><DialogTitle>{t('access.addList')}</DialogTitle>
                     <DialogDescription>
                     Create a new access list to restrict access to your hosts.
                     </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                       <div className="grid gap-2">
-                        <Label>Name</Label>
+                        <Label>{t('access.name')}</Label>
                         <Input value={newListName} onChange={e => setNewListName(e.target.value)} placeholder="Internal Admins" />
                       </div>
                     </div>
                     <DialogFooter>
-                       <Button onClick={handleAddList} disabled={addListMutation.isPending}>Save</Button>
+                       <Button onClick={handleAddList} disabled={addListMutation.isPending}>{t('common.save')}</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -143,10 +145,10 @@ export function AccessListsTab() {
           <Table>
              <TableHeader>
                <TableRow>
-                 <TableHead>Name</TableHead>
-                 <TableHead>Auth Users</TableHead>
-                 <TableHead>IP Rules</TableHead>
-                 <TableHead className="text-right">Actions</TableHead>
+                 <TableHead>{t('access.name')}</TableHead>
+                 <TableHead>{t('access.clients')}</TableHead>
+                 <TableHead>{t('access.ipRules')}</TableHead>
+                 <TableHead className="text-right">{t('access.actions')}</TableHead>
                </TableRow>
              </TableHeader>
              <TableBody>
@@ -171,7 +173,7 @@ export function AccessListsTab() {
                     <TableCell className="text-right">
                         {canManageHosts && (
                           <Button variant="outline" size="sm" className="mr-2" onClick={() => openManage(list)}>
-                              Manage
+                              {t('access.manage')}
                           </Button>
                         )}
                         {canManageHosts && (
@@ -195,21 +197,21 @@ export function AccessListsTab() {
        <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
            <DialogContent className="max-w-3xl">
                <DialogHeader>
-                   <DialogTitle>Manage {editingList?.name}</DialogTitle>
+                   <DialogTitle>{t('access.manageItems')} - {editingList?.name}</DialogTitle>
                </DialogHeader>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    {/* Clients Column */}
                    <div className="space-y-4">
                        <div className="flex items-center justify-between border-b pb-2">
-                           <h3 className="font-semibold">Basic Auth Users</h3>
+                           <h3 className="font-semibold">{t('access.basicAuth')}</h3>
                        </div>
                        <div className="flex gap-2 items-end">
                            <div className="grid gap-1 flex-1">
-                               <Label className="text-xs">Username</Label>
+                               <Label className="text-xs">{t('access.username')}</Label>
                                <Input value={newClientUser} onChange={e => setNewClientUser(e.target.value)} />
                            </div>
                            <div className="grid gap-1 flex-1">
-                               <Label className="text-xs">Password</Label>
+                               <Label className="text-xs">{t('access.password')}</Label>
                                <Input type="password" value={newClientPass} onChange={e => setNewClientPass(e.target.value)} />
                            </div>
                            <Button size="sm" onClick={handleAddClient} disabled={addClientMutation.isPending}><Plus className="h-4 w-4"/></Button>
@@ -230,20 +232,20 @@ export function AccessListsTab() {
                    {/* IPs Column */}
                    <div className="space-y-4">
                        <div className="flex items-center justify-between border-b pb-2">
-                           <h3 className="font-semibold">IP Rules</h3>
+                           <h3 className="font-semibold">{t('access.ipAddressRules')}</h3>
                        </div>
                        <div className="flex gap-2 items-end">
                            <div className="grid gap-1 flex-1">
-                               <Label className="text-xs">IP Address / CIDR</Label>
+                               <Label className="text-xs">{t('access.ipAddress')}</Label>
                                <Input value={newIp} onChange={e => setNewIp(e.target.value)} placeholder="1.2.3.4" />
                            </div>
                            <div className="grid gap-1 w-[80px]">
-                               <Label className="text-xs">Action</Label>
+                               <Label className="text-xs">{t('access.action')}</Label>
                                <Select value={newIpAction} onValueChange={v => setNewIpAction(v as any)}>
                                    <SelectTrigger className="h-10"><SelectValue/></SelectTrigger>
                                    <SelectContent>
-                                       <SelectItem value="allow">Allow</SelectItem>
-                                       <SelectItem value="deny">Deny</SelectItem>
+                                       <SelectItem value="allow">{t('access.allow')}</SelectItem>
+                                       <SelectItem value="deny">{t('access.deny')}</SelectItem>
                                    </SelectContent>
                                </Select>
                            </div>
