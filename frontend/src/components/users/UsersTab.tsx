@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Plus, Trash2, Edit2, Shield, User, Eye, Loader2 } from "lucide-react";
 import {
   useUsers,
@@ -50,12 +51,8 @@ const roleConfig = {
   viewer: { label: "Viewer", color: "secondary" as const, icon: Eye },
 };
 
-function formatDate(timestamp: number | null): string {
-  if (!timestamp) return "Never";
-  return new Date(timestamp * 1000).toLocaleString("ko-KR");
-}
-
 export function UsersTab() {
+  const { t } = useTranslation();
   const { data: users, isLoading } = useUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
@@ -76,7 +73,7 @@ export function UsersTab() {
 
   const handleCreate = async () => {
     if (!newUsername || !newPassword) {
-      toast.error("Username and password are required");
+      toast.error(t('users.usernamePasswordRequired'));
       return;
     }
 
@@ -86,13 +83,13 @@ export function UsersTab() {
         password: newPassword,
         role: newRole,
       });
-      toast.success(`User "${newUsername}" created successfully`);
+      toast.success(t('users.userCreated', { username: newUsername }));
       setCreateOpen(false);
       setNewUsername("");
       setNewPassword("");
       setNewRole("viewer");
-    } catch (e) {
-      toast.error("Failed to create user");
+    } catch {
+      toast.error(t('users.createUserFailed'));
     }
   };
 
@@ -104,32 +101,32 @@ export function UsersTab() {
     if (editRole && editRole !== editingUser.role) data.role = editRole;
 
     if (Object.keys(data).length === 0) {
-      toast.info("No changes to save");
+      toast.info(t('users.noChangesToSave'));
       return;
     }
 
     try {
       await updateUser.mutateAsync({ id: editingUser.id, data });
-      toast.success(`User "${editingUser.username}" updated successfully`);
+      toast.success(t('users.userUpdated', { username: editingUser.username }));
       setEditOpen(false);
       setEditingUser(null);
       setEditPassword("");
       setEditRole("");
-    } catch (e) {
-      toast.error("Failed to update user");
+    } catch {
+      toast.error(t('users.updateUserFailed'));
     }
   };
 
   const handleDelete = async (user: UserType) => {
-    if (!confirm(`Are you sure you want to delete user "${user.username}"?`)) {
+    if (!confirm(t('users.deleteConfirm', { username: user.username }))) {
       return;
     }
 
     try {
       await deleteUser.mutateAsync(user.id);
-      toast.success(`User "${user.username}" deleted`);
-    } catch (e) {
-      toast.error("Failed to delete user");
+      toast.success(t('users.userDeleted'));
+    } catch {
+      toast.error(t('users.deleteUserFailed'));
     }
   };
 
@@ -138,6 +135,11 @@ export function UsersTab() {
     setEditRole(user.role);
     setEditPassword("");
     setEditOpen(true);
+  };
+
+  const formatDate = (timestamp: number | null): string => {
+    if (!timestamp) return t('users.never');
+    return new Date(timestamp * 1000).toLocaleString();
   };
 
   if (isLoading) {
@@ -154,29 +156,29 @@ export function UsersTab() {
         <div>
           <CardTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            User Management
+            {t('users.title')}
           </CardTitle>
           <CardDescription>
-            Manage user accounts and their roles
+            {t('users.description')}
           </CardDescription>
         </div>
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Plus className="mr-2 h-4 w-4" /> Add User
+              <Plus className="mr-2 h-4 w-4" /> {t('users.addUser')}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New User</DialogTitle>
+              <DialogTitle>{t('users.addUser')}</DialogTitle>
               <DialogDescription>
                 Add a new user to the system
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">{t('users.username')}</Label>
                 <Input
                   id="username"
                   value={newUsername}
@@ -185,7 +187,7 @@ export function UsersTab() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('users.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -195,30 +197,30 @@ export function UsersTab() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
+                <Label htmlFor="role">{t('users.role')}</Label>
                 <Select value={newRole} onValueChange={setNewRole}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin - Full access</SelectItem>
+                    <SelectItem value="admin">{t('users.admin')} - Full access</SelectItem>
                     <SelectItem value="operator">
-                      Operator - Manage hosts & streams
+                      {t('users.operator')} - Manage hosts & streams
                     </SelectItem>
-                    <SelectItem value="viewer">Viewer - Read only</SelectItem>
+                    <SelectItem value="viewer">{t('users.viewer')} - Read only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t('users.cancel')}
               </Button>
               <Button onClick={handleCreate} disabled={createUser.isPending}>
                 {createUser.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Create
+                {t('users.addUser')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -229,11 +231,11 @@ export function UsersTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Username</TableHead>
-              <TableHead>Role</TableHead>
+              <TableHead>{t('users.username')}</TableHead>
+              <TableHead>{t('users.role')}</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead>Last Login</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t('users.lastLogin')}</TableHead>
+              <TableHead className="text-right">{t('users.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -247,7 +249,7 @@ export function UsersTab() {
                   <TableCell>
                     <Badge variant={role.color} className="flex items-center gap-1 w-fit">
                       <RoleIcon className="h-3 w-3" />
-                      {role.label}
+                      {t(`users.${user.role}`)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
@@ -291,47 +293,47 @@ export function UsersTab() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>{t('users.editUser')}</DialogTitle>
             <DialogDescription>
               Update user "{editingUser?.username}"
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-role">Role</Label>
+              <Label htmlFor="edit-role">{t('users.role')}</Label>
               <Select value={editRole} onValueChange={setEditRole}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin - Full access</SelectItem>
+                  <SelectItem value="admin">{t('users.admin')} - Full access</SelectItem>
                   <SelectItem value="operator">
-                    Operator - Manage hosts & streams
+                    {t('users.operator')} - Manage hosts & streams
                   </SelectItem>
-                  <SelectItem value="viewer">Viewer - Read only</SelectItem>
+                  <SelectItem value="viewer">{t('users.viewer')} - Read only</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-password">New Password (optional)</Label>
+              <Label htmlFor="edit-password">{t('users.newPassword')}</Label>
               <Input
                 id="edit-password"
                 type="password"
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
-                placeholder="Leave blank to keep current"
+                placeholder={t('users.leaveBlank')}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
+              {t('users.cancel')}
             </Button>
             <Button onClick={handleEdit} disabled={updateUser.isPending}>
               {updateUser.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Save Changes
+              {t('users.save')}
             </Button>
           </DialogFooter>
         </DialogContent>

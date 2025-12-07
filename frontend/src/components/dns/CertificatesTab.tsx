@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useDnsProviders, type CreateDnsProviderReq } from "../../hooks/useDnsProviders";
 import { useCertificates, type CreateCertReq } from "../../hooks/useCertificates";
 import {
@@ -43,12 +44,14 @@ aws_secret_access_key = YOUR_SECRET_ACCESS_KEY
 };
 
 export function CertificatesTab() {
+  const { t } = useTranslation();
+  
   return (
     <div className="p-4">
       <Tabs defaultValue="certs" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="certs">Issued Certificates</TabsTrigger>
-          <TabsTrigger value="providers">DNS Providers</TabsTrigger>
+          <TabsTrigger value="certs">{t('certificates.issuedCertificates')}</TabsTrigger>
+          <TabsTrigger value="providers">{t('certificates.dnsProviders')}</TabsTrigger>
         </TabsList>
         
         <TabsContent value="certs" className="space-y-4">
@@ -64,6 +67,7 @@ export function CertificatesTab() {
 }
 
 function IssuedCertificates() {
+  const { t } = useTranslation();
   const { certs, requestCert } = useCertificates();
   const { dnsProviders } = useDnsProviders();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -75,66 +79,67 @@ function IssuedCertificates() {
 
   const handleRequest = async () => {
     if (!newCert.domain || !newCert.email) {
-      toast.error("Domain and Email are required");
+      toast.error(t('certificates.domainEmailRequired'));
       return;
     }
     try {
       await requestCert(newCert);
-      toast.success("Certificate requested. It may take a few minutes to issue.");
+      toast.success(t('certificates.certRequested'));
       setIsCreateOpen(false);
       setNewCert({ domain: "", email: "", provider_id: undefined });
     } catch (e) {
-      toast.error("Failed to request certificate");
+      toast.error(t('certificates.certRequestFailed'));
       console.error(e);
     }
   };
 
+  // eslint-disable-next-line react-hooks/purity
   const now = Math.floor(Date.now() / 1000);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-lg font-semibold">Issued Certificates</h2>
+          <h2 className="text-lg font-semibold">{t('certificates.issuedCertificates')}</h2>
           <p className="text-sm text-muted-foreground">
-            Manage Let's Encrypt certificates for your domains.
+            {t('certificates.issuedCertsDesc')}
           </p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Plus className="mr-2 h-4 w-4" /> Request Certificate
+              <Plus className="mr-2 h-4 w-4" /> {t('certificates.requestCertificate')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Request Let's Encrypt Certificate</DialogTitle>
+              <DialogTitle>{t('certificates.requestLetsEncrypt')}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="domain">Domain Names</Label>
+                <Label htmlFor="domain">{t('certificates.domainNames')}</Label>
                 <Input
                   id="domain"
-                  placeholder="e.g. example.com or *.example.com"
+                  placeholder={t('certificates.domainPlaceholder')}
                   value={newCert.domain}
                   onChange={(e) => setNewCert({ ...newCert, domain: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  For wildcards (*.example.com), you MUST select a DNS Provider.
+                  {t('certificates.wildcardNote')}
                 </p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">{t('certificates.emailAddress')}</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@example.com"
+                  placeholder={t('certificates.emailPlaceholder')}
                   value={newCert.email}
                   onChange={(e) => setNewCert({ ...newCert, email: e.target.value })}
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="provider">DNS Provider (Optional)</Label>
+                <Label htmlFor="provider">{t('certificates.dnsProviderOptional')}</Label>
                 <Select
                   value={newCert.provider_id?.toString()}
                   onValueChange={(val) =>
@@ -142,10 +147,10 @@ function IssuedCertificates() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Use HTTP-01 Challenge" />
+                    <SelectValue placeholder={t('certificates.useHttp01')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="http">Use HTTP-01 Challenge (No DNS API)</SelectItem>
+                    <SelectItem value="http">{t('certificates.useHttp01NoDns')}</SelectItem>
                     {dnsProviders.map((p) => (
                       <SelectItem key={p.id} value={p.id.toString()}>
                         {p.name} ({p.provider_type})
@@ -154,13 +159,12 @@ function IssuedCertificates() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Select a DNS provider to use DNS-01 challenge (required for wildcards). 
-                  Default is HTTP-01.
+                  {t('certificates.dns01Note')}
                 </p>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleRequest}>Request</Button>
+              <Button onClick={handleRequest}>{t('certificates.request')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -170,16 +174,16 @@ function IssuedCertificates() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Domain</TableHead>
-              <TableHead>Expires</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{t('certificates.domain')}</TableHead>
+              <TableHead>{t('certificates.expires')}</TableHead>
+              <TableHead>{t('certificates.status')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {certs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center h-24 text-muted-foreground">
-                  No certificates found.
+                  {t('certificates.noCertificatesFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -197,21 +201,21 @@ function IssuedCertificates() {
                     <TableCell>
                       {new Date(cert.expires_at * 1000).toLocaleDateString()} 
                       <span className="text-muted-foreground ml-2">
-                        ({daysLeft} days left)
+                        ({daysLeft} {t('certificates.daysLeft')})
                       </span>
                     </TableCell>
                     <TableCell>
                       {isExpired ? (
                         <span className="flex items-center text-red-500 gap-1">
-                          <AlertTriangle className="h-4 w-4" /> Expired
+                          <AlertTriangle className="h-4 w-4" /> {t('certificates.expired')}
                         </span>
                       ) : isWarning ? (
                         <span className="flex items-center text-yellow-500 gap-1">
-                          <AlertTriangle className="h-4 w-4" /> Renew Soon
+                          <AlertTriangle className="h-4 w-4" /> {t('certificates.renewSoon')}
                         </span>
                       ) : (
                         <span className="flex items-center text-green-500 gap-1">
-                          <CheckCircle className="h-4 w-4" /> Valid
+                          <CheckCircle className="h-4 w-4" /> {t('certificates.valid')}
                         </span>
                       )}
                     </TableCell>
@@ -227,6 +231,7 @@ function IssuedCertificates() {
 }
 
 function DnsProviders() {
+  const { t } = useTranslation();
   const { dnsProviders, createDnsProvider, deleteDnsProvider } = useDnsProviders();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newProvider, setNewProvider] = useState<CreateDnsProviderReq>({
@@ -237,12 +242,12 @@ function DnsProviders() {
 
   const handleCreate = async () => {
     if (!newProvider.name || !newProvider.credentials) {
-      toast.error("Please fill in all fields");
+      toast.error(t('certificates.fillAllFields'));
       return;
     }
     try {
       await createDnsProvider(newProvider);
-      toast.success("DNS Provider created");
+      toast.success(t('certificates.dnsProviderCreated'));
       setIsCreateOpen(false);
       setNewProvider({
         name: "",
@@ -250,18 +255,18 @@ function DnsProviders() {
         credentials: PROVIDER_TEMPLATES["cloudflare"],
       });
     } catch (e) {
-      toast.error("Failed to create DNS Provider");
+      toast.error(t('certificates.dnsProviderCreateFailed'));
       console.error(e);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm("Are you sure you want to delete this DNS Provider?")) {
+    if (confirm(t('certificates.deleteDnsProviderConfirm'))) {
       try {
         await deleteDnsProvider(id);
-        toast.success("DNS Provider deleted");
+        toast.success(t('certificates.dnsProviderDeleted'));
       } catch (e) {
-        toast.error("Failed to delete DNS Provider");
+        toast.error(t('certificates.dnsProviderDeleteFailed'));
         console.error(e);
       }
     }
@@ -279,27 +284,27 @@ function DnsProviders() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-lg font-semibold">DNS Providers</h2>
+          <h2 className="text-lg font-semibold">{t('certificates.dnsProviders')}</h2>
           <p className="text-sm text-muted-foreground">
-            Manage API credentials for DNS challenges (required for Wildcard Certs).
+            {t('certificates.dnsProvidersDesc')}
           </p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button variant="outline">
-              <Plus className="mr-2 h-4 w-4" /> Add Provider
+              <Plus className="mr-2 h-4 w-4" /> {t('certificates.addProvider')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Add DNS Provider</DialogTitle>
+              <DialogTitle>{t('certificates.addDnsProvider')}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name">{t('certificates.name')}</Label>
                 <Input
                   id="name"
-                  placeholder="e.g. My Cloudflare"
+                  placeholder={t('certificates.namePlaceholder')}
                   value={newProvider.name}
                   onChange={(e) =>
                     setNewProvider({ ...newProvider, name: e.target.value })
@@ -307,24 +312,24 @@ function DnsProviders() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="type">Provider Type</Label>
+                <Label htmlFor="type">{t('certificates.providerType')}</Label>
                 <Select
                   value={newProvider.provider_type}
                   onValueChange={handleTypeChange}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a provider" />
+                    <SelectValue placeholder={t('certificates.selectProvider')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cloudflare">Cloudflare</SelectItem>
-                    <SelectItem value="route53">AWS Route53</SelectItem>
-                    <SelectItem value="digitalocean">DigitalOcean</SelectItem>
-                    <SelectItem value="google">Google Cloud DNS</SelectItem>
+                    <SelectItem value="cloudflare">{t('certificates.cloudflare')}</SelectItem>
+                    <SelectItem value="route53">{t('certificates.route53')}</SelectItem>
+                    <SelectItem value="digitalocean">{t('certificates.digitalocean')}</SelectItem>
+                    <SelectItem value="google">{t('certificates.googleCloudDns')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="credentials">Credentials (INI Format)</Label>
+                <Label htmlFor="credentials">{t('certificates.credentials')}</Label>
                 <Textarea
                   id="credentials"
                   className="font-mono text-sm h-[150px]"
@@ -334,13 +339,12 @@ function DnsProviders() {
                   }
                 />
                 <p className="text-xs text-muted-foreground">
-                  Enter the credentials in the format required by the Certbot DNS
-                  plugin.
+                  {t('certificates.credentialsNote')}
                 </p>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate}>Save</Button>
+              <Button onClick={handleCreate}>{t('certificates.save')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -350,17 +354,17 @@ function DnsProviders() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Created At</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
+              <TableHead>{t('certificates.name')}</TableHead>
+              <TableHead>{t('certificates.type')}</TableHead>
+              <TableHead>{t('certificates.createdAt')}</TableHead>
+              <TableHead className="w-[100px]">{t('certificates.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {dnsProviders.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
-                  No DNS Providers found.
+                  {t('certificates.noDnsProvidersFound')}
                 </TableCell>
               </TableRow>
             ) : (

@@ -1,18 +1,20 @@
 import { FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useLogs } from "@/hooks/useLogs";
 
 export function LogsTab() {
+  const { t } = useTranslation();
   const { data: logs } = useLogs();
 
   return (
     <Card className="bg-black text-white border-zinc-800">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-white">
-           <FileText className="h-5 w-5" /> System Logs
+           <FileText className="h-5 w-5" /> {t('logs.title')}
         </CardTitle>
         <CardDescription className="text-zinc-400">
-           Live tail of access.log (auto-refreshes every 5s)
+           {t('logs.description')}
         </CardDescription>
       </CardHeader>
       <CardContent>

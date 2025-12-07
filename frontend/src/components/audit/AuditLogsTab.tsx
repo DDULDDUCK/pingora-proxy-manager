@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FileText, Filter, RefreshCw, Loader2, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 import type { AuditLog, AuditLogQuery } from "@/hooks/useAuditLogs";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ function formatTimestamp(timestamp: number): string {
 }
 
 export function AuditLogsTab() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState<AuditLogQuery>({ limit: 100 });
   const [usernameFilter, setUsernameFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
@@ -120,10 +122,10 @@ export function AuditLogsTab() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Audit Logs
+              {t('audit.title')}
             </CardTitle>
             <CardDescription>
-              Track all administrative actions in the system
+              {t('audit.description')}
             </CardDescription>
           </div>
           <Button
@@ -133,14 +135,14 @@ export function AuditLogsTab() {
             disabled={isFetching}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-            Refresh
+            {t('common.refresh')}
           </Button>
         </div>
 
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4 pt-4">
           <div className="flex-1 space-y-1">
-            <Label htmlFor="username-filter">Username</Label>
+            <Label htmlFor="username-filter">{t('audit.user')}</Label>
             <Input
               id="username-filter"
               value={usernameFilter}
@@ -168,10 +170,10 @@ export function AuditLogsTab() {
           <div className="flex items-end gap-2">
             <Button onClick={applyFilters}>
               <Filter className="mr-2 h-4 w-4" />
-              Apply
+              {t('common.apply')}
             </Button>
             <Button variant="outline" onClick={clearFilters}>
-              Clear
+              {t('common.clear')}
             </Button>
           </div>
         </div>
@@ -187,11 +189,11 @@ export function AuditLogsTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">Timestamp</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Resource</TableHead>
-                  <TableHead>Details</TableHead>
+                  <TableHead className="w-[180px]">{t('audit.timestamp')}</TableHead>
+                  <TableHead>{t('audit.user')}</TableHead>
+                  <TableHead>{t('audit.action')}</TableHead>
+                  <TableHead>{t('audit.resource')}</TableHead>
+                  <TableHead>{t('audit.details')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

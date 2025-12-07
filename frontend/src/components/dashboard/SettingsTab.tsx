@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +8,7 @@ import { RefreshCw, Save } from "lucide-react";
 import { api } from "@/lib/api";
 
 export function SettingsTab() {
+  const { t } = useTranslation();
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,8 +21,8 @@ export function SettingsTab() {
     try {
       const content = await api.request("/settings/error-page");
       setHtml(content || "");
-    } catch (err) {
-      toast.error("Failed to load error page");
+    } catch {
+      toast.error(t('settings.loadError'));
     } finally {
       setLoading(false);
     }
@@ -34,8 +36,8 @@ export function SettingsTab() {
         body: JSON.stringify({ html }),
       });
       toast.success("Error page updated");
-    } catch (err) {
-      toast.error("Failed to update error page");
+    } catch {
+      toast.error(t('settings.updateError'));
     } finally {
       setLoading(false);
     }
@@ -45,10 +47,9 @@ export function SettingsTab() {
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Custom Error Page</CardTitle>
+          <CardTitle>{t('settings.title')}</CardTitle>
           <CardDescription>
-            Edit the HTML template shown when a 502 Bad Gateway or 404 Not Found error occurs.
-            Use <code>{`>Error<`}</code> as a placeholder for the status code.
+            {t('settings.description')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -66,7 +67,7 @@ export function SettingsTab() {
               </Button>
               <Button onClick={handleSave} disabled={loading}>
                 <Save className="mr-2 h-4 w-4" />
-                Save Changes
+                {t('settings.save')}
               </Button>
             </div>
           </div>
