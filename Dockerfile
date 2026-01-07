@@ -15,8 +15,8 @@ RUN npm run build
 FROM rust:slim-bookworm AS backend-builder
 WORKDIR /app
 
-# 필수 빌드 도구 설치 (cmake, clang 등)
-RUN apt-get update && apt-get install -y cmake clang pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+# 필수 빌드 도구 설치 (cmake, clang, perl 등)
+RUN apt-get update && apt-get install -y cmake clang pkg-config libssl-dev perl && rm -rf /var/lib/apt/lists/*
 
 # 워크스페이스 설정 파일 복사
 COPY Cargo.toml Cargo.lock ./
