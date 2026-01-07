@@ -4,12 +4,15 @@ mod auth;
 mod db;
 mod proxy;
 mod state;
-mod stream_manager; // Added
+mod stream_manager;
+mod tls_manager;
 
 use crate::proxy::DynamicProxy;
 use crate::state::{AppState, ProxyConfig, HostConfig, LocationConfig};
-use crate::stream_manager::StreamManager; // Added
+use crate::stream_manager::StreamManager;
+use crate::tls_manager::SharedCertManager;
 use pingora::prelude::*;
+use pingora::listeners::tls::TlsSettings;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -238,7 +241,40 @@ fn main() {
     );
 
     my_proxy.add_tcp("0.0.0.0:8080");
-    my_proxy.add_tls("0.0.0.0:443", "data/certs/default.crt", "data/certs/default.key").unwrap();
+    
+    // SNI 기반 동적 인증서 선택 설정
+    let cert_manager = match tls_manager::DynamicCertManager::new(
+        "data/certs",
+        "data/certs/default.crt",
+        "data/certs/default.key",
+    ) {
+        Ok(manager) => {
+            // 기존 인증서 사전 로드
+            if let Err(e) = manager.preload_certs() {
+                tracing::warn!("⚠️ Failed to preload certificates: {}", e);
+            }
+            Some(SharedCertManager::new(manager))
+        }
+        Err(e) => {
+            tracing::warn!("⚠️ Failed to initialize dynamic cert manager: {}. Using static default cert.", e);
+            None
+        }
+    };
+
+    if let Some(cert_manager) = cert_manager {
+        // SNI 기반 동적 인증서 선택 사용
+        let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_manager))
+            .expect("Failed to create TLS settings with callbacks");
+        
+        tls_settings.enable_h2();
+        
+        my_proxy.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
+        tracing::info!("🔐 TLS with SNI-based dynamic certificate selection enabled");
+    } else {
+        // 폴백: 디폴트 인증서만 사용
+        my_proxy.add_tls("0.0.0.0:443", "data/certs/default.crt", "data/certs/default.key").unwrap();
+        tracing::info!("🔐 TLS with static default certificate enabled");
+    }
 
     my_server.add_service(my_proxy);
     tracing::info!("🚀 Data Plane (Proxy) running on port 8080 (HTTP) and 443 (HTTPS)");

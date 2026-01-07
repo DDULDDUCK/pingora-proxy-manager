@@ -1,10 +1,10 @@
 [package]
 name = "backend"       
-version = "1.0.5"
+version = "1.0.6"
 edition = "2021"
 
 [dependencies]
-pingora = { version = "0.6.0", features = ["lb"] }
+pingora = { version = "0.6.0", features = ["lb", "openssl"] }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8.7", features = ["multipart"] }
 env_logger = "0.11"
@@ -27,5 +27,7 @@ axum-extra = { version = "0.12.2", features = ["typed-header", "multipart"] }
 dotenvy = "0.15.7"
 tracing-appender = "0.2.4"
 chrono = "0.4.42"
-http = "1.4.0" 
+http = "1.4.0"
 base64 = "0.22.1"
+parking_lot = "0.12"
+openssl = "0.10"
