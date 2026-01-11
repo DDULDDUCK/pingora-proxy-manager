@@ -6,6 +6,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use openssl::rsa::Rsa;
+use openssl::x509::X509;
+use openssl::pkey::PKey;
+use openssl::asn1::Asn1Time;
+use openssl::hash::MessageDigest;
 
 /// 도메인별 인증서를 동적으로 로드하는 TLS 관리자
 /// SNI(Server Name Indication)를 기반으로 적절한 인증서를 선택합니다.
@@ -24,6 +29,58 @@ struct CertKeyPair {
     key_pem: Vec<u8>,
 }
 
+/// 디폴트 인증서가 존재하는지 확인하고, 없으면 새로 생성합니다.
+fn ensure_default_cert(cert_path: &str, key_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let cert_path = Path::new(cert_path);
+    let key_path = Path::new(key_path);
+
+    if cert_path.exists() && key_path.exists() {
+        return Ok(());
+    }
+
+    tracing::warn!("⚠️ Default certificate not found. Generating a new self-signed certificate...");
+
+    // 디렉토리 생성
+    if let Some(parent) = cert_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // 1. RSA 키 생성
+    let rsa = Rsa::generate(2048)?;
+    let pkey = PKey::from_rsa(rsa)?;
+
+    // 2. X509 인증서 생성
+    let mut x509 = X509::builder()?;
+    x509.set_version(2)?;
+    x509.set_pubkey(&pkey)?;
+    
+    let not_before = Asn1Time::days_from_now(0)?;
+    let not_after = Asn1Time::days_from_now(3650)?; // 10년 유효
+    x509.set_not_before(&not_before)?;
+    x509.set_not_after(&not_after)?;
+    
+    // Subject 설정
+    let mut name = openssl::x509::X509Name::builder()?;
+    name.append_entry_by_text("CN", "Pingora Proxy Manager Default")?;
+    let name = name.build();
+    x509.set_subject_name(&name)?;
+    x509.set_issuer_name(&name)?;
+    
+    // 서명
+    x509.sign(&pkey, MessageDigest::sha256())?;
+    
+    let cert_pem = x509.build().to_pem()?;
+    let key_pem = pkey.private_key_to_pem_pkcs8()?;
+    
+    // 파일 저장
+    fs::write(cert_path, cert_pem)?;
+    fs::write(key_path, key_pem)?;
+    
+    tracing::info!("✅ Generated new default certificate at {:?}", cert_path);
+    
+    Ok(())
+}
+
 impl DynamicCertManager {
     /// 새로운 DynamicCertManager를 생성합니다.
     /// 
@@ -32,6 +89,9 @@ impl DynamicCertManager {
     /// * `default_cert_path` - 디폴트 인증서 경로
     /// * `default_key_path` - 디폴트 키 경로
     pub fn new(cert_dir: &str, default_cert_path: &str, default_key_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        // 디폴트 인증서 확인 및 생성
+        ensure_default_cert(default_cert_path, default_key_path)?;
+
         let default_cert = CertKeyPair {
             cert_pem: fs::read(default_cert_path)?,
             key_pem: fs::read(default_key_path)?,
