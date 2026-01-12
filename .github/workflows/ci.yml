@@ -2,12 +2,12 @@ name: Fast CI
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches-ignore: [ "master", "main" ]
     paths:
       - 'backend/**'
       - '.github/workflows/ci.yml'
   pull_request:
-    branches: [ "master", "main" ]
+    branches-ignore: [ "master", "main" ]
     paths:
       - 'backend/**'
 
