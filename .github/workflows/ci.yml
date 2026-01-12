@@ -1,0 +1,51 @@
+name: Fast CI
+
+on:
+  push:
+    branches: [ "master", "main" ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ "master", "main" ]
+    paths:
+      - 'backend/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Quick Check & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang pkg-config libssl-dev
+
+    # 🔥 Magic Cache: Speeds up builds by 5-10x
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: backend
+
+    - name: Check Formatting
+      run: cargo fmt -- --check
+
+    - name: Check Code (Clippy)
+      run: cargo clippy -- -D warnings
+
+    - name: Run Tests
+      run: cargo test

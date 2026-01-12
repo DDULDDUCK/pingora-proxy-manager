@@ -1,9 +1,9 @@
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::fs;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
@@ -14,6 +14,7 @@ pub struct LocationConfig {
     pub rewrite: bool,
 }
 
+/// Configuration for a specific virtual host.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostConfig {
     pub id: i64,
@@ -65,20 +66,20 @@ pub struct HeaderConfig {
     pub target: String, // request/response
 }
 
-/// 프록시 라우팅 설정
+/// Proxy routing and security configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProxyConfig {
-    /// 도메인 -> 설정
+    /// Domain name to host configuration mapping.
     pub hosts: HashMap<String, HostConfig>,
-    /// Access List ID -> Config
+    /// Access List ID to configuration mapping.
     #[serde(skip)]
     pub access_lists: HashMap<i64, AccessListConfig>,
-    /// Host ID -> Headers (for quick lookup in proxy)
+    /// Host ID to header configurations mapping.
     #[serde(skip)]
     pub headers: HashMap<i64, Vec<HeaderConfig>>,
 }
 
-/// 실시간 메트릭 (Atomic Counters)
+/// Real-time traffic metrics using atomic counters.
 #[derive(Debug, Default)]
 pub struct Metrics {
     pub total_requests: AtomicU64,
@@ -92,7 +93,7 @@ impl Metrics {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     // 현재 값을 읽고 카운터를 0으로 리셋 (플러시용)
     pub fn reset(&self) -> (u64, u64, u64, u64, u64) {
         (
@@ -105,18 +106,17 @@ impl Metrics {
     }
 }
 
-/// 전역 상태 관리 (Thread-Safe)
+/// Global application state shared across threads.
 #[derive(Clone)]
 pub struct AppState {
-    /// 설정에 대한 Atomic 포인터. 읽기는 Lock-Free.
+    /// Thread-safe, lock-free access to proxy configuration.
     pub config: Arc<ArcSwap<ProxyConfig>>,
 
-    /// 메트릭 통계
+    /// Real-time traffic statistics.
     pub metrics: Arc<Metrics>,
 
-    /// 에러 페이지 템플릿 (Atomic Update 지원)
+    /// HTML template for custom error pages.
     pub error_template: Arc<ArcSwap<String>>,
-    
 }
 
 impl AppState {
@@ -147,12 +147,12 @@ impl AppState {
         let config = self.config.load();
         config.headers.get(&host_id).cloned().unwrap_or_default()
     }
-    
+
     /// 설정을 통째로 교체합니다. (Atomic)
     pub fn update_config(&self, new_config: ProxyConfig) {
         self.config.store(Arc::new(new_config));
     }
-    
+
     /// 에러 템플릿 업데이트
     pub fn update_error_template(&self, new_template: String) {
         self.error_template.store(Arc::new(new_template));

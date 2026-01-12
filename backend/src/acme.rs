@@ -1,12 +1,12 @@
 use crate::db::{self, DbPool};
 use crate::state::AppState;
 use std::error::Error;
-use std::process::Command;
-use std::sync::Arc;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use tokio::fs;
+use tokio::process::Command;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::os::unix::fs::PermissionsExt; // Import for setting file permissions
+use tokio::fs; // Import for setting file permissions
 
 pub struct AcmeManager {
     state: Arc<AppState>,
@@ -16,21 +16,31 @@ pub struct AcmeManager {
 
 impl AcmeManager {
     pub fn new(state: Arc<AppState>, db_pool: DbPool, email: String) -> Self {
-        Self { state, db_pool, contact_email: email }
+        Self {
+            state,
+            db_pool,
+            contact_email: email,
+        }
     }
 
     /// Requests a certificate using Certbot CLI.
     /// If `provider_id` is provided, uses DNS-01 challenge.
     /// Otherwise, defaults to HTTP-01 challenge using --webroot.
-    pub async fn request_certificate(&self, domain: &str, provider_id: Option<i64>) -> Result<(), Box<dyn Error>> {
+    pub async fn request_certificate(
+        &self,
+        domain: &str,
+        provider_id: Option<i64>,
+    ) -> Result<(), Box<dyn Error>> {
         tracing::info!("🔐 Requesting certificate for {} via Certbot", domain);
 
         let mut cmd = Command::new("certbot");
 
         // Common Certbot arguments
         cmd.arg("certonly")
-            .arg("-d").arg(domain)
-            .arg("--email").arg(&self.contact_email)
+            .arg("-d")
+            .arg(domain)
+            .arg("--email")
+            .arg(&self.contact_email)
             .arg("--agree-tos")
             .arg("--non-interactive");
 
@@ -39,18 +49,23 @@ impl AcmeManager {
 
         if let Some(pid) = provider_id {
             // --- DNS-01 Challenge ---
-            let provider = db::get_dns_provider(&self.db_pool, pid).await?
+            let provider = db::get_dns_provider(&self.db_pool, pid)
+                .await?
                 .ok_or("DNS Provider not found")?;
-            
-            tracing::info!("👉 Using DNS Provider: {} ({})", provider.name, provider.provider_type);
+
+            tracing::info!(
+                "👉 Using DNS Provider: {} ({})",
+                provider.name,
+                provider.provider_type
+            );
 
             // Create temporary credentials file
             let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
             let temp_path = format!("/tmp/dns-creds-{}-{}.ini", provider.provider_type, now);
-            
+
             // Write credentials to file
             fs::write(&temp_path, provider.credentials.trim()).await?;
-            
+
             // Set permissions to 600 (required by Certbot DNS plugins)
             let mut perms = fs::metadata(&temp_path).await?.permissions();
             perms.set_mode(0o600);
@@ -62,42 +77,46 @@ impl AcmeManager {
             match provider.provider_type.as_str() {
                 "cloudflare" => {
                     cmd.arg("--dns-cloudflare")
-                        .arg("--dns-cloudflare-credentials").arg(&temp_path)
-                        .arg("--dns-cloudflare-propagation-seconds").arg("30");
-                },
+                        .arg("--dns-cloudflare-credentials")
+                        .arg(&temp_path)
+                        .arg("--dns-cloudflare-propagation-seconds")
+                        .arg("30");
+                }
                 "route53" => {
                     cmd.arg("--dns-route53")
-                       .env("AWS_SHARED_CREDENTIALS_FILE", &temp_path); // Use env var for Route53
+                        .env("AWS_SHARED_CREDENTIALS_FILE", &temp_path); // Use env var for Route53
                     tracing::warn!("⚠️ Route53: AWS credentials loaded from temp file via environment variable. Ensure file content is in AWS credentials format.");
-                },
+                }
                 "digitalocean" => {
                     cmd.arg("--dns-digitalocean")
-                        .arg("--dns-digitalocean-credentials").arg(&temp_path);
-                },
+                        .arg("--dns-digitalocean-credentials")
+                        .arg(&temp_path);
+                }
                 "google" => {
                     cmd.arg("--dns-google")
-                        .arg("--dns-google-credentials").arg(&temp_path);
-                },
+                        .arg("--dns-google-credentials")
+                        .arg(&temp_path);
+                }
                 _ => {
-                    return Err(format!("Unsupported provider type: {}", provider.provider_type).into());
+                    return Err(
+                        format!("Unsupported provider type: {}", provider.provider_type).into(),
+                    );
                 }
             }
-
         } else {
             // --- HTTP-01 Challenge ---
             tracing::info!("👉 Using HTTP-01 (Webroot)");
             let webroot_path = "/app/data/acme-challenge";
             fs::create_dir_all(webroot_path).await?;
-            
-            cmd.arg("--webroot")
-                .arg("-w").arg(webroot_path);
+
+            cmd.arg("--webroot").arg("-w").arg(webroot_path);
         }
 
         // 2. Execute Certbot
         tracing::info!("🚀 Running Certbot command for {}", domain);
-        
-        // Capture output
-        let output = cmd.output()?; // Blocking call (consider tokio::process::Command in pure async app)
+
+        // Capture output (async)
+        let output = cmd.output().await?;
 
         // 3. Cleanup Credentials File
         if let Some(path) = credentials_file_path {
@@ -116,25 +135,29 @@ impl AcmeManager {
         let clean_domain = domain.replace("*.", "");
         let cert_base_path_exact = Path::new("/etc/letsencrypt/live").join(domain);
         let cert_base_path_wildcard = Path::new("/etc/letsencrypt/live").join(&clean_domain);
-        
-        let cert_base_path = if cert_base_path_exact.exists() {
+
+        let cert_base_path = if fs::try_exists(&cert_base_path_exact).await.unwrap_or(false) {
             cert_base_path_exact
-        } else if cert_base_path_wildcard.exists() {
+        } else if fs::try_exists(&cert_base_path_wildcard).await.unwrap_or(false) {
             cert_base_path_wildcard
         } else {
-            return Err(format!("Certificates directory not found for {} at {:?} or {:?}", domain, cert_base_path_exact, cert_base_path_wildcard).into());
+            return Err(format!(
+                "Certificates directory not found for {} at {:?} or {:?}",
+                domain, cert_base_path_exact, cert_base_path_wildcard
+            )
+            .into());
         };
 
         let privkey_path = cert_base_path.join("privkey.pem");
         let fullchain_path = cert_base_path.join("fullchain.pem");
 
-        if !privkey_path.exists() || !fullchain_path.exists() {
+        if !fs::try_exists(&privkey_path).await.unwrap_or(false) || !fs::try_exists(&fullchain_path).await.unwrap_or(false) {
             return Err(format!("Certificates not found at {:?}", cert_base_path).into());
         }
 
         // 5. Copy certificates to our local data directory
         let local_cert_dir = Path::new("data/certs");
-        if !local_cert_dir.exists() {
+        if !fs::try_exists(local_cert_dir).await.unwrap_or(false) {
             fs::create_dir_all(local_cert_dir).await?;
         }
 
@@ -149,11 +172,11 @@ impl AcmeManager {
         // 6. Update Database with Expiration Date
         let cert_content = fs::read(&local_cert_path).await?;
         if let Ok((_, pem)) = x509_parser::pem::parse_x509_pem(&cert_content) {
-             if let Ok(cert) = pem.parse_x509() {
-                 let expires_at = cert.validity().not_after.timestamp();
-                 db::upsert_cert(&self.db_pool, domain, expires_at, provider_id).await?;
-                 tracing::info!("📅 Certificate expiration updated in DB: {}", expires_at);
-             }
+            if let Ok(cert) = pem.parse_x509() {
+                let expires_at = cert.validity().not_after.timestamp();
+                db::upsert_cert(&self.db_pool, domain, expires_at, provider_id).await?;
+                tracing::info!("📅 Certificate expiration updated in DB: {}", expires_at);
+            }
         }
 
         Ok(())

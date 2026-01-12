@@ -23,18 +23,18 @@ fn get_jwt_secret() -> Vec<u8> {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,      // username
-    pub exp: usize,       // 만료 시간
-    pub user_id: i64,     // 사용자 ID
-    pub role: String,     // 역할 (admin, operator, viewer)
+    pub sub: String,  // username
+    pub exp: usize,   // 만료 시간
+    pub user_id: i64, // 사용자 ID
+    pub role: String, // 역할 (admin, operator, viewer)
 }
 
 // 역할 정의
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Role {
-    Viewer = 0,    // 읽기 전용
-    Operator = 1,  // 호스트/스트림 관리 가능
-    Admin = 2,     // 모든 권한 (사용자 관리 포함)
+    Viewer = 0,   // 읽기 전용
+    Operator = 1, // 호스트/스트림 관리 가능
+    Admin = 2,    // 모든 권한 (사용자 관리 포함)
 }
 
 impl Role {
@@ -89,7 +89,9 @@ impl IntoResponse for AuthError {
             AuthError::MissingCredentials => (StatusCode::BAD_REQUEST, "Missing credentials"),
             AuthError::TokenCreation => (StatusCode::INTERNAL_SERVER_ERROR, "Token creation error"),
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
-            AuthError::InternalServerError => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            AuthError::InternalServerError => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+            }
         };
         let body = axum::Json(serde_json::json!({
             "error": error_message,

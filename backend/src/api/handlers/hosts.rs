@@ -1,19 +1,25 @@
-use axum::{
-    extract::{State, Json, Query, Path as AxumPath},
-    http::StatusCode,
+use crate::api::{
+    sync_state,
+    types::{
+        CreateHeaderReq, CreateHostReq, CreateLocationReq, DeleteLocationQuery, HeaderRes, HostRes,
+    },
+    ApiState,
 };
-use crate::api::{ApiState, types::{CreateHostReq, HostRes, CreateLocationReq, DeleteLocationQuery, HeaderRes, CreateHeaderReq}, sync_state};
 use crate::auth::Claims;
 use crate::db;
+use crate::error::AppError;
+use axum::{
+    extract::{Json, Path as AxumPath, Query, State},
+    http::StatusCode,
+};
 
-pub async fn list_hosts(
-    _: Claims,
-    State(state): State<ApiState>,
-) -> Json<Vec<HostRes>> {
+pub async fn list_hosts(_: Claims, State(state): State<ApiState>) -> Result<Json<Vec<HostRes>>, AppError> {
     let hosts = state.app_state.config.load();
-    let res: Vec<HostRes> = hosts.hosts.iter()
-        .map(|(d, c)| HostRes { 
-            domain: d.clone(), 
+    let res: Vec<HostRes> = hosts
+        .hosts
+        .iter()
+        .map(|(d, c)| HostRes {
+            domain: d.clone(),
             target: c.target.clone(),
             scheme: c.scheme.clone(),
             ssl_forced: c.ssl_forced,
@@ -21,35 +27,39 @@ pub async fn list_hosts(
             redirect_status: c.redirect_status,
             locations: c.locations.clone(),
             access_list_id: c.access_list_id,
-            headers: c.headers.iter().map(|h| HeaderRes { // Map to HeaderRes
-                id: h.id,
-                name: h.name.clone(),
-                value: h.value.clone(),
-                target: h.target.clone(),
-            }).collect(),
+            headers: c
+                .headers
+                .iter()
+                .map(|h| HeaderRes {
+                    id: h.id,
+                    name: h.name.clone(),
+                    value: h.value.clone(),
+                    target: h.target.clone(),
+                })
+                .collect(),
         })
         .collect();
-    Json(res)
+    Ok(Json(res))
 }
 
 pub async fn add_host(
     claims: Claims,
     State(state): State<ApiState>,
     Json(payload): Json<CreateHostReq>,
-) -> StatusCode {
-    // Operator 이상만 호스트 생성/수정 가능
+) -> Result<StatusCode, AppError> {
     if !claims.can_manage_hosts() {
-        return StatusCode::FORBIDDEN;
+        return Err(AppError::Forbidden("Insufficient permissions".to_string()));
     }
-    
+
     let scheme = payload.scheme.clone().unwrap_or_else(|| "http".to_string());
     let ssl_forced = payload.ssl_forced.unwrap_or(false);
     let redirect_status = payload.redirect_status.unwrap_or(301);
-    
-    // 기존 호스트가 있는지 확인 (create vs update 구분)
-    let is_update = db::get_host_id(&state.db_pool, &payload.domain).await.ok().flatten().is_some();
-    
-    match db::upsert_host(
+
+    let is_update = db::get_host_id(&state.db_pool, &payload.domain)
+        .await?
+        .is_some();
+
+    db::upsert_host(
         &state.db_pool,
         &payload.domain,
         &payload.target,
@@ -58,51 +68,41 @@ pub async fn add_host(
         payload.redirect_to.clone(),
         redirect_status,
         payload.access_list_id,
-    ).await {
-        Ok(_) => {
-            // 감사 로그
-            let action = if is_update { "update" } else { "create" };
-            let details = format!(
-                "domain={}, target={}, scheme={}, ssl_forced={}, redirect_to={:?}, access_list_id={:?}",
-                payload.domain, payload.target, scheme, ssl_forced, payload.redirect_to, payload.access_list_id
-            );
-            let _ = db::insert_audit_log(
-                &state.db_pool,
-                &claims.sub,
-                Some(claims.user_id),
-                action,
-                "host",
-                Some(&payload.domain),
-                Some(&details),
-                None,
-            ).await;
-            
-            sync_state(&state).await;
-            StatusCode::CREATED
-        }
-        Err(e) => {
-            tracing::error!("DB Error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    }
+    )
+    .await?;
+
+    let action = if is_update { "update" } else { "create" };
+    let details = format!(
+        "domain={}, target={}, scheme={}, ssl_forced={}, redirect_to={:?}, access_list_id={:?}",
+        payload.domain, payload.target, scheme, ssl_forced, payload.redirect_to, payload.access_list_id
+    );
+    let _ = db::insert_audit_log(
+        &state.db_pool,
+        &claims.sub,
+        Some(claims.user_id),
+        action,
+        "host",
+        Some(&payload.domain),
+        Some(&details),
+        None,
+    )
+    .await;
+
+    sync_state(&state).await;
+    Ok(StatusCode::CREATED)
 }
 
 pub async fn delete_host_handler(
     claims: Claims,
     State(state): State<ApiState>,
     AxumPath(domain): AxumPath<String>,
-) -> StatusCode {
-    // Operator 이상만 호스트 삭제 가능
+) -> Result<StatusCode, AppError> {
     if !claims.can_manage_hosts() {
-        return StatusCode::FORBIDDEN;
+        return Err(AppError::Forbidden("Insufficient permissions".to_string()));
     }
-    
-    if let Err(e) = db::delete_host(&state.db_pool, &domain).await {
-        tracing::error!("DB Error: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
-    
-    // 감사 로그
+
+    db::delete_host(&state.db_pool, &domain).await?;
+
     let _ = db::insert_audit_log(
         &state.db_pool,
         &claims.sub,
@@ -112,10 +112,11 @@ pub async fn delete_host_handler(
         Some(&domain),
         Some(&format!("Deleted host: {}", domain)),
         None,
-    ).await;
-    
+    )
+    .await;
+
     sync_state(&state).await;
-    StatusCode::OK
+    Ok(StatusCode::OK)
 }
 
 pub async fn add_location(
@@ -123,27 +124,28 @@ pub async fn add_location(
     State(state): State<ApiState>,
     AxumPath(domain): AxumPath<String>,
     Json(payload): Json<CreateLocationReq>,
-) -> StatusCode {
-    // Operator 이상만 로케이션 추가 가능
+) -> Result<StatusCode, AppError> {
     if !claims.can_manage_hosts() {
-        return StatusCode::FORBIDDEN;
+        return Err(AppError::Forbidden("Insufficient permissions".to_string()));
     }
-    
-    let host_id = match db::get_host_id(&state.db_pool, &domain).await {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-    };
+
+    let host_id = db::get_host_id(&state.db_pool, &domain)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Host {} not found", domain)))?;
 
     let scheme = payload.scheme.clone().unwrap_or_else(|| "http".to_string());
     let rewrite = payload.rewrite.unwrap_or(false);
 
-    if let Err(e) = db::upsert_location(&state.db_pool, host_id, &payload.path, &payload.target, &scheme, rewrite).await {
-        tracing::error!("DB Error: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
-    
-    // 감사 로그
+    db::upsert_location(
+        &state.db_pool,
+        host_id,
+        &payload.path,
+        &payload.target,
+        &scheme,
+        rewrite,
+    )
+    .await?;
+
     let details = format!(
         "host={}, path={}, target={}, scheme={}, rewrite={}",
         domain, payload.path, payload.target, scheme, rewrite
@@ -157,10 +159,11 @@ pub async fn add_location(
         Some(&format!("{}:{}", domain, payload.path)),
         Some(&details),
         None,
-    ).await;
-    
+    )
+    .await;
+
     sync_state(&state).await;
-    StatusCode::CREATED
+    Ok(StatusCode::CREATED)
 }
 
 pub async fn delete_location_handler(
@@ -168,24 +171,17 @@ pub async fn delete_location_handler(
     State(state): State<ApiState>,
     AxumPath(domain): AxumPath<String>,
     Query(q): Query<DeleteLocationQuery>,
-) -> StatusCode {
-    // Operator 이상만 로케이션 삭제 가능
+) -> Result<StatusCode, AppError> {
     if !claims.can_manage_hosts() {
-        return StatusCode::FORBIDDEN;
+        return Err(AppError::Forbidden("Insufficient permissions".to_string()));
     }
-    
-    let host_id = match db::get_host_id(&state.db_pool, &domain).await {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-    };
 
-    if let Err(e) = db::delete_location(&state.db_pool, host_id, &q.path).await {
-        tracing::error!("DB Error: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
-    
-    // 감사 로그
+    let host_id = db::get_host_id(&state.db_pool, &domain)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Host {} not found", domain)))?;
+
+    db::delete_location(&state.db_pool, host_id, &q.path).await?;
+
     let _ = db::insert_audit_log(
         &state.db_pool,
         &claims.sub,
@@ -195,26 +191,33 @@ pub async fn delete_location_handler(
         Some(&format!("{}:{}", domain, q.path)),
         Some(&format!("Deleted location {} from host {}", q.path, domain)),
         None,
-    ).await;
-    
+    )
+    .await;
+
     sync_state(&state).await;
-    StatusCode::OK
+    Ok(StatusCode::OK)
 }
 
 pub async fn list_host_headers(
     _: Claims,
     State(state): State<ApiState>,
     AxumPath(domain): AxumPath<String>,
-) -> Result<Json<Vec<HeaderRes>>, StatusCode> {
+) -> Result<Json<Vec<HeaderRes>>, AppError> {
     let hosts = state.app_state.config.load();
-    let host_config = hosts.hosts.get(&domain).ok_or(StatusCode::NOT_FOUND)?;
-    
-    Ok(Json(host_config.headers.iter().map(|h| HeaderRes {
-        id: h.id,
-        name: h.name.clone(),
-        value: h.value.clone(),
-        target: h.target.clone(),
-    }).collect()))
+    let host_config = hosts.hosts.get(&domain).ok_or_else(|| AppError::NotFound(format!("Host {} not found", domain)))?;
+
+    Ok(Json(
+        host_config
+            .headers
+            .iter()
+            .map(|h| HeaderRes {
+                id: h.id,
+                name: h.name.clone(),
+                value: h.value.clone(),
+                target: h.target.clone(),
+            })
+            .collect(),
+    ))
 }
 
 pub async fn add_header_to_host(
@@ -222,21 +225,23 @@ pub async fn add_header_to_host(
     State(state): State<ApiState>,
     AxumPath(domain): AxumPath<String>,
     Json(payload): Json<CreateHeaderReq>,
-) -> StatusCode {
+) -> Result<StatusCode, AppError> {
     if !claims.can_manage_hosts() {
-        return StatusCode::FORBIDDEN;
+        return Err(AppError::Forbidden("Insufficient permissions".to_string()));
     }
 
-    let host_id = match db::get_host_id(&state.db_pool, &domain).await {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-    };
+    let host_id = db::get_host_id(&state.db_pool, &domain)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Host {} not found", domain)))?;
 
-    if let Err(e) = db::add_header(&state.db_pool, host_id, &payload.name, &payload.value, &payload.target).await {
-        tracing::error!("DB Error adding header: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
+    db::add_header(
+        &state.db_pool,
+        host_id,
+        &payload.name,
+        &payload.value,
+        &payload.target,
+    )
+    .await?;
 
     let _ = db::insert_audit_log(
         &state.db_pool,
@@ -245,30 +250,28 @@ pub async fn add_header_to_host(
         "add",
         "header",
         Some(&format!("{}:{}", domain, payload.name)),
-        Some(&format!("Added header '{}: {}' to host {}", payload.name, payload.value, domain)),
+        Some(&format!(
+            "Added header '{}: {}' to host {}",
+            payload.name, payload.value, domain
+        )),
         None,
-    ).await;
+    )
+    .await;
 
     sync_state(&state).await;
-    StatusCode::CREATED
+    Ok(StatusCode::CREATED)
 }
 
 pub async fn delete_host_header(
     claims: Claims,
     State(state): State<ApiState>,
     AxumPath((domain, header_id)): AxumPath<(String, i64)>,
-) -> StatusCode {
+) -> Result<StatusCode, AppError> {
     if !claims.can_manage_hosts() {
-        return StatusCode::FORBIDDEN;
+        return Err(AppError::Forbidden("Insufficient permissions".to_string()));
     }
 
-    // Note: We don't strictly need host_id here for deletion,
-    // but a check could be added if headers should only be deletable by their parent host.
-    // For now, directly delete by header_id.
-    if let Err(e) = db::delete_header(&state.db_pool, header_id).await {
-        tracing::error!("DB Error deleting header: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
+    db::delete_header(&state.db_pool, header_id).await?;
 
     let _ = db::insert_audit_log(
         &state.db_pool,
@@ -277,10 +280,14 @@ pub async fn delete_host_header(
         "delete",
         "header",
         Some(&format!("{}:{}", domain, header_id)),
-        Some(&format!("Deleted header ID {} from host {}", header_id, domain)),
+        Some(&format!(
+            "Deleted header ID {} from host {}",
+            header_id, domain
+        )),
         None,
-    ).await;
-    
+    )
+    .await;
+
     sync_state(&state).await;
-    StatusCode::OK
+    Ok(StatusCode::OK)
 }

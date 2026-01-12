@@ -59,3 +59,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.sisyphus/

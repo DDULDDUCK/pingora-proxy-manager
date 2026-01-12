@@ -3,19 +3,19 @@ use std::error::Error;
 
 pub type DbPool = Pool<Sqlite>;
 
-pub mod hosts;
 pub mod access_lists;
-pub mod users;
 pub mod certs;
-pub mod streams;
+pub mod hosts;
 pub mod stats;
+pub mod streams;
+pub mod users;
 
-pub use hosts::*;
 pub use access_lists::*;
-pub use users::*;
 pub use certs::*;
-pub use streams::*;
+pub use hosts::*;
 pub use stats::*;
+pub use streams::*;
+pub use users::*;
 
 /// DB 초기화 및 스키마 생성
 pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
@@ -45,11 +45,13 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 마이그레이션: access_list_id 컬럼이 없으면 추가 (기존 DB 호환성)
-    // Note: SQLite에서 컬럼 존재 여부 확인 후 추가하는 로직은 복잡하므로, 
-    // 단순하게 실패를 허용하는 방식으로 시도하거나(pragmatic approach), 
-    // 아래 쿼리는 컬럼이 없을 때만 성공하도록 작성할 수는 없으므로 
+    // Note: SQLite에서 컬럼 존재 여부 확인 후 추가하는 로직은 복잡하므로,
+    // 단순하게 실패를 허용하는 방식으로 시도하거나(pragmatic approach),
+    // 아래 쿼리는 컬럼이 없을 때만 성공하도록 작성할 수는 없으므로
     // 에러를 무시하는 방식으로 처리합니다.
-    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN access_list_id INTEGER").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN access_list_id INTEGER")
+        .execute(&pool)
+        .await;
 
     // Locations (경로별 라우팅) 테이블 생성
     sqlx::query(
@@ -186,7 +188,9 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 마이그레이션: provider_id 컬럼 추가
-    let _ = sqlx::query("ALTER TABLE certs ADD COLUMN provider_id INTEGER").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE certs ADD COLUMN provider_id INTEGER")
+        .execute(&pool)
+        .await;
 
     // 사용자 테이블 생성 (로그인용) - role 추가
     sqlx::query(
@@ -205,9 +209,17 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 마이그레이션: role 컬럼 추가 (기존 DB 호환성)
-    let _ = sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE users ADD COLUMN last_login INTEGER").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))",
+    )
+    .execute(&pool)
+    .await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN last_login INTEGER")
+        .execute(&pool)
+        .await;
 
     // 감사 로그(Audit Log) 테이블 생성
     sqlx::query(
@@ -229,12 +241,15 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 인덱스 추가 (조회 속도 향상)
-    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp);")
-        .execute(&pool)
-        .await;
-    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs (username);")
-        .execute(&pool)
-        .await;
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp);",
+    )
+    .execute(&pool)
+    .await;
+    let _ =
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs (username);")
+            .execute(&pool)
+            .await;
 
     // 트래픽 통계 테이블 생성 (시계열)
     sqlx::query(
@@ -254,9 +269,11 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 인덱스 추가 (조회 속도 향상)
-    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_traffic_stats_timestamp ON traffic_stats (timestamp);")
-        .execute(&pool)
-        .await;
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_traffic_stats_timestamp ON traffic_stats (timestamp);",
+    )
+    .execute(&pool)
+    .await;
 
     Ok(pool)
 }

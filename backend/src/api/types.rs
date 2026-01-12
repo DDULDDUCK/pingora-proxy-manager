@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::state::LocationConfig;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct LoginReq {
@@ -16,7 +16,7 @@ pub struct LoginRes {
 pub struct CreateHostReq {
     pub domain: String,
     pub target: String,
-    pub scheme: Option<String>, 
+    pub scheme: Option<String>,
     pub ssl_forced: Option<bool>,
     pub redirect_to: Option<String>,
     pub redirect_status: Option<i64>,
@@ -74,7 +74,7 @@ pub struct RealtimeStatsRes {
 
 #[derive(Deserialize)]
 pub struct HistoryStatsQuery {
-    pub hours: Option<i64>, 
+    pub hours: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -87,7 +87,7 @@ pub struct CreateStreamReq {
     pub listen_port: u16,
     pub forward_host: String,
     pub forward_port: u16,
-    pub protocol: Option<String>, 
+    pub protocol: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -145,7 +145,6 @@ pub struct AccessListIpRes {
     pub ip: String,
     pub action: String,
 }
-
 
 // --- User Management Structs ---
 

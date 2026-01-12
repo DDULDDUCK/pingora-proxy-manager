@@ -7,7 +7,6 @@ edition = "2021"
 pingora = { version = "0.6.0", features = ["lb", "openssl"] }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8.7", features = ["multipart"] }
-env_logger = "0.11"
 log = "0.4"
 async-trait = "0.1"
 arc-swap = "1.7.1"
@@ -31,3 +30,11 @@ http = "1.4.0"
 base64 = "0.22.1"
 parking_lot = "0.12"
 openssl = "0.10"
+thiserror = "2.0.17"
+
+[dev-dependencies]
+tokio-test = "0.4"
+sqlx-cli = { version = "0.8", features = ["sqlite"] }
+axum-test = "16.0.0" 
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3.10"

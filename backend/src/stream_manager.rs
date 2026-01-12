@@ -1,10 +1,11 @@
+use crate::constants;
 use crate::db::{self, DbPool};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::task::JoinHandle;
-use std::net::SocketAddr;
-use std::time::Duration;
 use tokio::time::timeout;
 
 #[derive(Clone)]
@@ -37,15 +38,16 @@ impl StreamManager {
         match db::get_all_streams(&self.db_pool).await {
             Ok(streams) => {
                 // 👇 [수정 1] streams의 소유권이 넘어가기 전에 개수를 먼저 저장
-                let count = streams.len(); 
-                
+                let count = streams.len();
+
                 for s in streams {
                     self.start_stream(
-                        s.listen_port as u16, 
-                        &s.forward_host, 
-                        s.forward_port as u16, 
-                        &s.protocol
-                    ).await;
+                        s.listen_port as u16,
+                        &s.forward_host,
+                        s.forward_port as u16,
+                        &s.protocol,
+                    )
+                    .await;
                 }
                 // 여기서 count 사용
                 tracing::info!("✅ Loaded {} streams", count);
@@ -55,7 +57,13 @@ impl StreamManager {
     }
 
     /// 단일 스트림 시작
-    pub async fn start_stream(&self, listen_port: u16, forward_host: &str, forward_port: u16, protocol: &str) {
+    pub async fn start_stream(
+        &self,
+        listen_port: u16,
+        forward_host: &str,
+        forward_port: u16,
+        protocol: &str,
+    ) {
         // 이미 실행 중인 포트라면 중지
         self.stop_stream(listen_port);
 
@@ -64,7 +72,12 @@ impl StreamManager {
         let port_clone = listen_port;
         let fwd_clone = forward_addr.clone();
 
-        tracing::info!("▶️ Starting {} Stream: :{} -> {}", protocol.to_uppercase(), listen_port, forward_addr);
+        tracing::info!(
+            "▶️ Starting {} Stream: :{} -> {}",
+            protocol.to_uppercase(),
+            listen_port,
+            forward_addr
+        );
 
         let handle = if protocol == "udp" {
             tokio::spawn(async move {
@@ -97,17 +110,31 @@ impl StreamManager {
 /// TCP 프록시 구현 (양방향 Copy)
 async fn run_tcp_proxy(listen_port: u16, forward_addr: &str) -> std::io::Result<()> {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", listen_port)).await?;
-    
+
     loop {
         let (mut inbound, client_addr) = listener.accept().await?;
         let target = forward_addr.to_string();
-        
+
         tokio::spawn(async move {
             match TcpStream::connect(&target).await {
                 Ok(mut outbound) => {
                     // 양방향 데이터 전송 (Zero Copy)
-                    if let Err(e) = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await {
-                        tracing::debug!("TCP connection closed ({}: {})", client_addr, e);
+                    let res = timeout(
+                        Duration::from_secs(constants::timeout::TCP_TIMEOUT_SECS),
+                        tokio::io::copy_bidirectional(&mut inbound, &mut outbound),
+                    )
+                    .await;
+
+                    match res {
+                        Ok(Ok(_)) => {
+                            tracing::debug!("TCP connection closed gracefully ({})", client_addr);
+                        }
+                        Ok(Err(e)) => {
+                            tracing::debug!("TCP connection closed ({}: {})", client_addr, e);
+                        }
+                        Err(_) => {
+                            tracing::debug!("TCP connection timed out ({})", client_addr);
+                        }
                     }
                 }
                 Err(e) => {
@@ -122,11 +149,12 @@ async fn run_tcp_proxy(listen_port: u16, forward_addr: &str) -> std::io::Result<
 async fn run_udp_proxy(listen_port: u16, forward_addr: &str) -> std::io::Result<()> {
     // 1. 리스너 소켓 바인딩
     let listener = Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", listen_port)).await?);
-    
+
     // 2. 클라이언트 세션 관리 (Client Addr -> Upstream Socket)
-    let sessions: Arc<Mutex<HashMap<SocketAddr, Arc<UdpSocket>>>> = Arc::new(Mutex::new(HashMap::new()));
-    
-    let mut buf = [0u8; 65535]; // Max UDP packet size
+    let sessions: Arc<Mutex<HashMap<SocketAddr, Arc<UdpSocket>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+
+    let mut buf = [0u8; constants::network::UDP_BUFFER_SIZE]; // Max UDP packet size
 
     loop {
         // 클라이언트로부터 데이터 수신
@@ -139,7 +167,7 @@ async fn run_udp_proxy(listen_port: u16, forward_addr: &str) -> std::io::Result<
         };
 
         let data = &buf[..len];
-        
+
         // 👇 [수정 2] Lock 범위를 최소화하여 await 호출 시 Lock을 들고 있지 않게 함
         // 1) 먼저 세션이 있는지 확인 (Lock)
         let existing_socket = {
@@ -180,13 +208,20 @@ async fn run_udp_proxy(listen_port: u16, forward_addr: &str) -> std::io::Result<
                 let sessions_clone = sessions.clone();
 
                 tokio::spawn(async move {
-                    let mut resp_buf = [0u8; 65535];
+                    let mut resp_buf = [0u8; constants::network::UDP_BUFFER_SIZE];
                     loop {
                         // 1분간 응답 없으면 세션 종료 (메모리 누수 방지)
-                        match timeout(Duration::from_secs(60), upstream_clone.recv(&mut resp_buf)).await {
+                        match timeout(
+                            Duration::from_secs(constants::timeout::UDP_SESSION_TIMEOUT_SECS),
+                            upstream_clone.recv(&mut resp_buf),
+                        )
+                        .await
+                        {
                             Ok(Ok(n)) => {
                                 // 받은 데이터를 원본 클라이언트에게 전송
-                                if let Err(e) = listener_clone.send_to(&resp_buf[..n], src_addr_clone).await {
+                                if let Err(e) =
+                                    listener_clone.send_to(&resp_buf[..n], src_addr_clone).await
+                                {
                                     tracing::debug!("Failed to send UDP back to client: {}", e);
                                     break;
                                 }

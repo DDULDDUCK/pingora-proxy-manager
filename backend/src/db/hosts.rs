@@ -1,5 +1,4 @@
 use super::DbPool;
-use crate::state::HeaderConfig;
 
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct HostRow {
@@ -32,12 +31,27 @@ pub struct HeaderRow {
     pub target: String, // 'request' or 'response'
 }
 
+/// Retrieves all configured hosts from the database.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+///
+/// # Returns
+/// * `Result<Vec<HostRow>, sqlx::Error>` - A list of all hosts or a database error
 pub async fn get_all_hosts(pool: &DbPool) -> Result<Vec<HostRow>, sqlx::Error> {
     sqlx::query_as::<_, HostRow>("SELECT * FROM hosts")
         .fetch_all(pool)
         .await
 }
 
+/// Retrieves the ID of a host by its domain name.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `domain` - Domain name to search for
+///
+/// # Returns
+/// * `Result<Option<i64>, sqlx::Error>` - The host ID if found, None if not found, or a database error
 pub async fn get_host_id(pool: &DbPool, domain: &str) -> Result<Option<i64>, sqlx::Error> {
     let row = sqlx::query_as::<_, (i64,)>("SELECT id FROM hosts WHERE domain = ?")
         .bind(domain)
@@ -46,26 +60,68 @@ pub async fn get_host_id(pool: &DbPool, domain: &str) -> Result<Option<i64>, sql
     Ok(row.map(|r| r.0))
 }
 
+/// Retrieves all configured locations from the database.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+///
+/// # Returns
+/// * `Result<Vec<LocationRow>, sqlx::Error>` - A list of all locations or a database error
 pub async fn get_all_locations(pool: &DbPool) -> Result<Vec<LocationRow>, sqlx::Error> {
     sqlx::query_as::<_, LocationRow>("SELECT * FROM locations")
         .fetch_all(pool)
         .await
 }
 
-pub async fn get_headers_by_host_id(pool: &DbPool, host_id: i64) -> Result<Vec<HeaderRow>, sqlx::Error> {
+/// Retrieves all custom headers for a specific host.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `host_id` - ID of the host
+///
+/// # Returns
+/// * `Result<Vec<HeaderRow>, sqlx::Error>` - A list of headers for the host or a database error
+pub async fn get_headers_by_host_id(
+    pool: &DbPool,
+    host_id: i64,
+) -> Result<Vec<HeaderRow>, sqlx::Error> {
     sqlx::query_as::<_, HeaderRow>("SELECT * FROM headers WHERE host_id = ?")
         .bind(host_id)
         .fetch_all(pool)
         .await
 }
 
+/// Retrieves all custom headers from the database.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+///
+/// # Returns
+/// * `Result<Vec<HeaderRow>, sqlx::Error>` - A list of all headers or a database error
 pub async fn get_all_headers(pool: &DbPool) -> Result<Vec<HeaderRow>, sqlx::Error> {
     sqlx::query_as::<_, HeaderRow>("SELECT * FROM headers")
         .fetch_all(pool)
         .await
 }
 
-pub async fn add_header(pool: &DbPool, host_id: i64, name: &str, value: &str, target: &str) -> Result<i64, sqlx::Error> {
+/// Adds a new custom header to a host.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `host_id` - ID of the host to attach the header to
+/// * `name` - Header name
+/// * `value` - Header value
+/// * `target` - Target of the header ('request' or 'response')
+///
+/// # Returns
+/// * `Result<i64, sqlx::Error>` - The ID of the newly created header or a database error
+pub async fn add_header(
+    pool: &DbPool,
+    host_id: i64,
+    name: &str,
+    value: &str,
+    target: &str,
+) -> Result<i64, sqlx::Error> {
     let id = sqlx::query("INSERT INTO headers (host_id, name, value, target) VALUES (?, ?, ?, ?)")
         .bind(host_id)
         .bind(name)
@@ -77,6 +133,14 @@ pub async fn add_header(pool: &DbPool, host_id: i64, name: &str, value: &str, ta
     Ok(id)
 }
 
+/// Deletes a custom header from the database.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `id` - ID of the header to delete
+///
+/// # Returns
+/// * `Result<(), sqlx::Error>` - Success or a database error
 pub async fn delete_header(pool: &DbPool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM headers WHERE id = ?")
         .bind(id)
@@ -85,11 +149,25 @@ pub async fn delete_header(pool: &DbPool, id: i64) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// Inserts or updates a host configuration.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `domain` - Domain name
+/// * `target` - Upstream target URL
+/// * `scheme` - Upstream scheme ('http' or 'https')
+/// * `ssl_forced` - Whether to force HTTPS
+/// * `redirect_to` - Optional redirect URL
+/// * `redirect_status` - HTTP status code for redirect
+/// * `access_list_id` - Optional ID of the access list to apply
+///
+/// # Returns
+/// * `Result<(), sqlx::Error>` - Success or a database error
 pub async fn upsert_host(
-    pool: &DbPool, 
-    domain: &str, 
-    target: &str, 
-    scheme: &str, 
+    pool: &DbPool,
+    domain: &str,
+    target: &str,
+    scheme: &str,
     ssl_forced: bool,
     redirect_to: Option<String>,
     redirect_status: i64,
@@ -120,6 +198,14 @@ pub async fn upsert_host(
     Ok(())
 }
 
+/// Deletes a host by its domain name.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `domain` - Domain name to delete
+///
+/// # Returns
+/// * `Result<(), sqlx::Error>` - Success or a database error
 pub async fn delete_host(pool: &DbPool, domain: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM hosts WHERE domain = ?")
         .bind(domain)
@@ -128,7 +214,26 @@ pub async fn delete_host(pool: &DbPool, domain: &str) -> Result<(), sqlx::Error>
     Ok(())
 }
 
-pub async fn upsert_location(pool: &DbPool, host_id: i64, path: &str, target: &str, scheme: &str, rewrite: bool) -> Result<(), sqlx::Error> {
+/// Inserts or updates a location configuration for a host.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `host_id` - ID of the host
+/// * `path` - Location path
+/// * `target` - Upstream target URL
+/// * `scheme` - Upstream scheme
+/// * `rewrite` - Whether to enable path rewriting
+///
+/// # Returns
+/// * `Result<(), sqlx::Error>` - Success or a database error
+pub async fn upsert_location(
+    pool: &DbPool,
+    host_id: i64,
+    path: &str,
+    target: &str,
+    scheme: &str,
+    rewrite: bool,
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
         .bind(host_id)
         .bind(path)
@@ -136,7 +241,7 @@ pub async fn upsert_location(pool: &DbPool, host_id: i64, path: &str, target: &s
         .await?;
 
     sqlx::query(
-        "INSERT INTO locations (host_id, path, target, scheme, rewrite) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO locations (host_id, path, target, scheme, rewrite) VALUES (?, ?, ?, ?, ?)",
     )
     .bind(host_id)
     .bind(path)
@@ -148,6 +253,15 @@ pub async fn upsert_location(pool: &DbPool, host_id: i64, path: &str, target: &s
     Ok(())
 }
 
+/// Deletes a location by host ID and path.
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `host_id` - ID of the host
+/// * `path` - Path of the location to delete
+///
+/// # Returns
+/// * `Result<(), sqlx::Error>` - Success or a database error
 pub async fn delete_location(pool: &DbPool, host_id: i64, path: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
         .bind(host_id)
