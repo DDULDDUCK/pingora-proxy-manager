@@ -1,0 +1,17 @@
+services:
+  pingora-proxy-dev:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: pingora-proxy-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP Proxy
+      - "81:81"       # Dashboard/API
+      - "443:443"     # HTTPS Proxy
+    volumes:
+      - ./data:/app/data        # Persistence
+      - ./logs:/app/logs        # Logs
+    environment:
+      - JWT_SECRET=dev_secret_key
+      - RUST_LOG=debug

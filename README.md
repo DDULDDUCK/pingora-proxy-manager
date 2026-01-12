@@ -1,4 +1,3 @@
-
 # Pingora Proxy Manager
 <p align="center">
   <!-- 프로젝트 로고 -->
@@ -36,10 +35,6 @@ Simple, Modern, and Fast. Now supports Wildcard SSL & TCP/UDP Streams!
 - **🛡️ Access Control:** IP whitelisting/blacklisting and Basic Authentication support.
 - **🎨 Modern Dashboard:** Clean and responsive UI built with React, Tailwind CSS, and shadcn/ui.
 - **🐳 Docker Ready:** Single container deployment for easy setup and maintenance.
-<img width="1302" height="724" alt="image" src="https://github.com/user-attachments/assets/aeb84f5a-5db8-4f8a-94cc-d355301907f4" />
-<img width="1301" height="707" alt="image" src="https://github.com/user-attachments/assets/62add77b-a909-4ffb-8102-3b57c2007c3b" />
-<img width="1289" height="637" alt="image" src="https://github.com/user-attachments/assets/9d0e3a07-f79a-4f45-9fe3-d97ae9867fef" />
-<img width="1301" height="538" alt="image" src="https://github.com/user-attachments/assets/a1dfd699-492f-4218-8a23-579e9fdb17aa" />
 
 ## ❤️ Support the Development
 
@@ -121,29 +116,38 @@ If you want to build the image yourself:
    docker compose up --build -d
    ```
 
-## 🏗️ Architecture
-
-- **Data Plane (8080/443):** [Pingora](https://github.com/cloudflare/pingora) handles all traffic with high efficiency.
-- **Control Plane (81):** [Axum](https://github.com/tokio-rs/axum) serves the API and Dashboard.
-- **SSL Management:** Integrated `Certbot` for robust ACME handling.
-- **State Management:** `ArcSwap` for lock-free configuration reads.
-- **Database:** SQLite for persistent storage of hosts and certificates.
-
 ## 📦 Development
 
-To run locally without Docker (requires Rust and Node.js):
+### Native Development (Recommended)
 
-**Backend:**
+You can run the backend and frontend locally without Docker for faster iteration.
+
+**1. Start Backend:**
+The backend will automatically detect it's running in dev mode and use the project root `data/` folder.
 ```bash
+# Terminal 1
 cd backend
 cargo run
+# Backend listens on 0.0.0.0:81 (API) and 0.0.0.0:8080 (Proxy)
 ```
 
-**Frontend:**
+**2. Start Frontend:**
+The frontend dev server is configured to proxy API requests to `localhost:81`.
 ```bash
+# Terminal 2
 cd frontend
 npm install
 npm run dev
+# Open http://localhost:5173 (or the port shown in terminal)
+```
+
+### Docker Development
+
+If you prefer to test the production build locally:
+
+```bash
+# Uses docker-compose.dev.yml to build from local source
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 ## 🤝 Contributing
