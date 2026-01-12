@@ -47,16 +47,22 @@ impl ProxyHttp for DynamicProxy {
         }
 
         // 2. Host 파싱
-        let host = session
-            .req_header()
-            .headers
-            .get("Host")
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or_default()
-            .split(':')
-            .next()
-            .unwrap_or_default()
-            .to_string();
+        // Prioritize URI host (handles HTTP/2 :authority and HTTP/1.1 parsed host)
+        let host = if let Some(h) = session.req_header().uri.host() {
+            h.to_string()
+        } else {
+            // Fallback to manual Host header parsing
+            session
+                .req_header()
+                .headers
+                .get("Host")
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or_default()
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .to_string()
+        };
 
         ctx.host = host.clone();
 
