@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Server } from "lucide-react";
 import type { Host } from "@/hooks/useHosts";
 import { toast } from "sonner";
 import { useAddHost } from "@/hooks/useHosts";
@@ -33,10 +33,41 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
     access_list_id: null
   });
 
+  // Helper to get targets array from CSV string
+  const getTargets = () => {
+    if (!newHost.target) return [""];
+    return newHost.target.split(',').map(t => t.trim());
+  };
+
+  const setTargets = (targets: string[]) => {
+    setNewHost({ ...newHost, target: targets.join(',') });
+  };
+
+  const handleAddTarget = () => {
+    const current = getTargets();
+    setTargets([...current, ""]);
+  };
+
+  const handleRemoveTarget = (index: number) => {
+    const current = getTargets();
+    if (current.length <= 1) {
+        setTargets([""]); // Reset if last one
+        return;
+    }
+    const next = current.filter((_, i) => i !== index);
+    setTargets(next);
+  };
+
+  const handleTargetChange = (index: number, value: string) => {
+    const current = getTargets();
+    current[index] = value;
+    setTargets(current);
+  };
+
   const handleAddHost = () => {
     if (bulkMode) {
       const domains = bulkDomains
-        .split(/[,\n]/) // Fixed regex
+        .split(/[,\n]/) 
         .map(d => d.trim())
         .filter(d => d.length > 0);
       
@@ -87,7 +118,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { onOpenChange(isOpen); if (!isOpen) setBulkMode(false); }}>
       <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Add Host</Button></DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Host</DialogTitle>
           <DialogDescription>Add one or multiple proxy hosts at once</DialogDescription>
@@ -134,9 +165,36 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                    </SelectContent>
                  </Select>
               </div>
+              
+              {/* Multi-Target Input Section */}
               <div className="grid gap-2">
-                <Label>Target</Label>
-                <Input value={newHost.target} onChange={e => setNewHost({...newHost, target: e.target.value})} placeholder="127.0.0.1:8080" />
+                <div className="flex items-center justify-between">
+                    <Label>Target(s)</Label>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleAddTarget} className="h-6 px-2 text-xs">
+                        <Plus className="h-3 w-3 mr-1" /> Add
+                    </Button>
+                </div>
+                
+                <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                    {getTargets().map((t, idx) => (
+                        <div key={idx} className="flex gap-2">
+                            <Input 
+                                value={t} 
+                                onChange={e => handleTargetChange(idx, e.target.value)} 
+                                placeholder={idx === 0 ? "127.0.0.1:8080" : "10.0.0.2:8080"} 
+                                className="flex-1"
+                            />
+                            {getTargets().length > 1 && (
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveTarget(idx)}>
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                    Multiple targets enable <strong>Load Balancing</strong> (Random).
+                </p>
               </div>
           </div>
 

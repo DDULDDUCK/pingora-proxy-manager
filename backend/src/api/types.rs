@@ -37,6 +37,14 @@ pub struct DeleteLocationQuery {
 }
 
 #[derive(Serialize)]
+pub struct LocationRes {
+    pub path: String,
+    pub target: String,
+    pub scheme: String,
+    pub rewrite: bool,
+}
+
+#[derive(Serialize)]
 pub struct HostRes {
     pub domain: String,
     pub target: String,
@@ -44,9 +52,9 @@ pub struct HostRes {
     pub ssl_forced: bool,
     pub redirect_to: Option<String>,
     pub redirect_status: u16,
-    pub locations: Vec<LocationConfig>,
+    pub locations: Vec<LocationRes>, 
     pub access_list_id: Option<i64>,
-    pub headers: Vec<HeaderRes>, // Added headers field
+    pub headers: Vec<HeaderRes>,
 }
 
 #[derive(Deserialize)]
@@ -138,6 +146,7 @@ pub struct AccessListRes {
 #[derive(Serialize)]
 pub struct AccessListClientRes {
     pub username: String,
+    // password_hash removed
 }
 
 #[derive(Serialize)]
@@ -204,7 +213,7 @@ pub struct AuditLogRes {
 pub struct CreateDnsProviderReq {
     pub name: String,
     pub provider_type: String,
-    pub credentials: String, // JSON string expected
+    pub credentials: String,
 }
 
 #[derive(Serialize)]
@@ -220,7 +229,7 @@ pub struct DnsProviderRes {
 pub struct CreateHeaderReq {
     pub name: String,
     pub value: String,
-    pub target: String, // "request" or "response"
+    pub target: String,
 }
 
 #[derive(Serialize)]

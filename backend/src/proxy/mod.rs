@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use self::filters::{ProxyFilter, FilterResult};
+use rand::prelude::IndexedRandom; // Fix for rand 0.9
 
 pub struct DynamicProxy {
     pub state: Arc<AppState>,
@@ -176,14 +177,29 @@ impl ProxyHttp for DynamicProxy {
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
         if let Some(host_config) = &ctx.host_config {
-            let (target, scheme) = if let Some(loc) = &ctx.matched_location {
-                (&loc.target, &loc.scheme)
+            // LOAD BALANCING LOGIC:
+            // Check matched_location first, then host_config.
+            // Both now support multiple targets (Vec<String>).
+            
+            let (targets, scheme) = if let Some(loc) = &ctx.matched_location {
+                (&loc.targets, &loc.scheme)
             } else {
-                (&host_config.target, &host_config.scheme)
+                (&host_config.targets, &host_config.scheme)
+            };
+
+            // Select a target using simple Random Load Balancing
+            // If targets is empty (shouldn't happen with valid config), error out.
+            let target = if targets.is_empty() {
+                tracing::error!("No upstream targets configured for host: {}", ctx.host);
+                 return Err(Error::explain(ErrorType::HTTPStatus(constants::http::INTERNAL_ERROR), "No upstream targets found"));
+            } else {
+                // Pick random
+                let mut rng = rand::rng(); // Fixed for rand 0.9
+                targets.choose(&mut rng).unwrap() // Safe because we checked is_empty
             };
 
             let use_tls = scheme == "https";
-            tracing::info!("Routing {} -> {} (TLS: {})", ctx.host, target, use_tls);
+            tracing::info!("Routing {} -> {} (LB: Random/{} targets, TLS: {})", ctx.host, target, targets.len(), use_tls);
 
             let mut peer = Box::new(HttpPeer::new(target, use_tls, ctx.host.clone()));
 
@@ -207,7 +223,7 @@ impl ProxyHttp for DynamicProxy {
         &self,
         session: &mut Session,
         _e: Option<&pingora::Error>,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) {
         self.state
             .metrics
@@ -246,7 +262,7 @@ impl ProxyHttp for DynamicProxy {
                 path = %session.req_header().uri.path(),
                 status = status,
                 bytes = body_len,
-                host = ?session.req_header().headers.get("Host"),
+                host = %ctx.host,
                 "Request handled"
             );
         }

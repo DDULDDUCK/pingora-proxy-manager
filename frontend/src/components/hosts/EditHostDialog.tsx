@@ -40,10 +40,41 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
             redirect_to: host.redirect_to || "",
             redirect_status: host.redirect_status || 301,
             access_list_id: host.access_list_id || null,
-            // headers is part of host, no need to set here for form values
         });
     }
   }, [host]);
+
+  // --- Multi-Target Logic for Host Settings ---
+  const getTargets = () => {
+    if (!editFormHost.target) return [""];
+    return editFormHost.target.split(',').map(t => t.trim());
+  };
+
+  const setTargets = (targets: string[]) => {
+    setEditFormHost({ ...editFormHost, target: targets.join(',') });
+  };
+
+  const handleAddTarget = () => {
+    const current = getTargets();
+    setTargets([...current, ""]);
+  };
+
+  const handleRemoveTarget = (index: number) => {
+    const current = getTargets();
+    if (current.length <= 1) {
+        setTargets([""]); // Reset if last one
+        return;
+    }
+    const next = current.filter((_, i) => i !== index);
+    setTargets(next);
+  };
+
+  const handleTargetChange = (index: number, value: string) => {
+    const current = getTargets();
+    current[index] = value;
+    setTargets(current);
+  };
+  // --------------------------------------------
 
   const handleUpdateHost = () => {
     if (!host) return;
@@ -118,10 +149,10 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
         </DialogHeader>
         
         <Tabs defaultValue="settings" className="w-full">
-          <TabsList className="grid w-full grid-cols-3"> {/* Changed to 3 columns */}
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="settings">Host Settings</TabsTrigger>
             <TabsTrigger value="locations">Locations ({host?.locations?.length || 0})</TabsTrigger>
-            <TabsTrigger value="headers">Custom Headers ({host?.headers?.length || 0})</TabsTrigger> {/* New Tab */}
+            <TabsTrigger value="headers">Custom Headers ({host?.headers?.length || 0})</TabsTrigger>
           </TabsList>
           
           {/* Host Settings Tab */}
@@ -137,9 +168,35 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                   </SelectContent>
                 </Select>
               </div>
+              
+              {/* Multi-Target Input for Edit */}
               <div className="grid gap-2">
-                <Label>Target</Label>
-                <Input value={editFormHost.target || ""} onChange={e => setEditFormHost({...editFormHost, target: e.target.value})} placeholder="127.0.0.1:8080" />
+                <div className="flex items-center justify-between">
+                    <Label>Target(s)</Label>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleAddTarget} className="h-6 px-2 text-xs">
+                        <Plus className="h-3 w-3 mr-1" /> Add
+                    </Button>
+                </div>
+                <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                    {getTargets().map((t, idx) => (
+                        <div key={idx} className="flex gap-2">
+                            <Input 
+                                value={t} 
+                                onChange={e => handleTargetChange(idx, e.target.value)} 
+                                placeholder={idx === 0 ? "127.0.0.1:8080" : "10.0.0.2:8080"} 
+                                className="flex-1"
+                            />
+                            {getTargets().length > 1 && (
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveTarget(idx)}>
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                    Multiple targets enable <strong>Load Balancing</strong> (Random).
+                </p>
               </div>
             </div>
 
@@ -210,8 +267,9 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                   <Input value={newLocation.path} onChange={e => setNewLocation({...newLocation, path: e.target.value})} placeholder="/api" />
                 </div>
                 <div className="grid gap-1 flex-1">
-                  <Label>Target</Label>
-                  <Input value={newLocation.target} onChange={e => setNewLocation({...newLocation, target: e.target.value})} placeholder="10.0.0.5:3000" />
+                  <Label>Target(s)</Label>
+                  {/* Note: Ideally we should use the same multi-target input for Locations too, but for now keeping it simple as CSV string input. I'll just update placeholder */}
+                  <Input value={newLocation.target} onChange={e => setNewLocation({...newLocation, target: e.target.value})} placeholder="10.0.0.5:3000, 10.0.0.6:3000" />
                 </div>
               </div>
               <div className="flex items-end gap-3">

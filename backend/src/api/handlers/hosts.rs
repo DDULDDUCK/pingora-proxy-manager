@@ -2,6 +2,7 @@ use crate::api::{
     sync_state,
     types::{
         CreateHeaderReq, CreateHostReq, CreateLocationReq, DeleteLocationQuery, HeaderRes, HostRes,
+        LocationRes,
     },
     ApiState,
 };
@@ -20,12 +21,19 @@ pub async fn list_hosts(_: Claims, State(state): State<ApiState>) -> Result<Json
         .iter()
         .map(|(d, c)| HostRes {
             domain: d.clone(),
-            target: c.target.clone(),
+            // Join Vec<String> back to String for API compatibility
+            target: c.targets.join(","), 
             scheme: c.scheme.clone(),
             ssl_forced: c.ssl_forced,
             redirect_to: c.redirect_to.clone(),
             redirect_status: c.redirect_status,
-            locations: c.locations.clone(),
+            // Need to map locations too because they also have targets: Vec<String>
+            locations: c.locations.iter().map(|loc| LocationRes {
+                path: loc.path.clone(),
+                target: loc.targets.join(","),
+                scheme: loc.scheme.clone(),
+                rewrite: loc.rewrite,
+            }).collect(),
             access_list_id: c.access_list_id,
             headers: c
                 .headers
@@ -62,7 +70,7 @@ pub async fn add_host(
     db::upsert_host(
         &state.db_pool,
         &payload.domain,
-        &payload.target,
+        &payload.target, // DB expects String, so this is fine (CSV)
         &scheme,
         ssl_forced,
         payload.redirect_to.clone(),
@@ -140,7 +148,7 @@ pub async fn add_location(
         &state.db_pool,
         host_id,
         &payload.path,
-        &payload.target,
+        &payload.target, // DB expects String (CSV)
         &scheme,
         rewrite,
     )

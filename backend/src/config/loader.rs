@@ -34,12 +34,19 @@ impl ConfigLoader {
             // 1. Locations
             let mut locations_map: HashMap<i64, Vec<LocationConfig>> = HashMap::new();
             for loc in loc_rows {
+                // Split comma-separated targets
+                let targets: Vec<String> = loc.target
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
                 locations_map
                     .entry(loc.host_id)
                     .or_default()
                     .push(LocationConfig {
                         path: loc.path,
-                        target: loc.target,
+                        targets, // Use Vector
                         scheme: loc.scheme,
                         rewrite: loc.rewrite,
                     });
@@ -95,11 +102,19 @@ impl ConfigLoader {
             for row in rows {
                 let locs = locations_map.remove(&row.id).unwrap_or_default();
                 let host_headers = headers_map.get(&row.id).cloned().unwrap_or_default();
+                
+                // Split comma-separated targets
+                let targets: Vec<String> = row.target
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
                 hosts.insert(
                     row.domain,
                     HostConfig {
                         id: row.id,
-                        target: row.target,
+                        targets, // Use Vector
                         scheme: row.scheme,
                         locations: locs,
                         ssl_forced: row.ssl_forced,

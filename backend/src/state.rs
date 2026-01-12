@@ -8,7 +8,8 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
     pub path: String,
-    pub target: String,
+    // Changed: target -> targets for load balancing
+    pub targets: Vec<String>,
     pub scheme: String,
     #[serde(default)]
     pub rewrite: bool,
@@ -18,7 +19,8 @@ pub struct LocationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostConfig {
     pub id: i64,
-    pub target: String,
+    // Changed: target -> targets for load balancing
+    pub targets: Vec<String>,
     pub scheme: String, // "http" or "https"
     #[serde(default)]
     pub locations: Vec<LocationConfig>,
@@ -28,8 +30,8 @@ pub struct HostConfig {
     #[serde(default = "default_redirect_status")]
     pub redirect_status: u16,
     pub access_list_id: Option<i64>,
-    #[serde(default)] // Add this line
-    pub headers: Vec<HeaderConfig>, // Add this line
+    #[serde(default)]
+    pub headers: Vec<HeaderConfig>,
 }
 
 fn default_redirect_status() -> u16 {
