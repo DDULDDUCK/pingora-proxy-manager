@@ -106,7 +106,7 @@ impl AcmeManager {
         } else {
             // --- HTTP-01 Challenge ---
             tracing::info!("👉 Using HTTP-01 (Webroot)");
-            let webroot_path = "/app/data/acme-challenge";
+            let webroot_path = "data/acme-challenge";
             fs::create_dir_all(webroot_path).await?;
 
             cmd.arg("--webroot").arg("-w").arg(webroot_path);

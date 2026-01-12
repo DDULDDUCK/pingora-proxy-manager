@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, RefreshCw, Trash2, Server } from "lucide-react";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { Host } from "@/hooks/useHosts";
 import { toast } from "sonner";
 import { useAddHost } from "@/hooks/useHosts";
