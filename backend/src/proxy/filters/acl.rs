@@ -24,15 +24,15 @@ impl ProxyFilter for AclFilter {
                 if let Some(acl) = self.state.get_access_list(acl_id) {
                     // (A) IP 기반 필터링
                     if !acl.ips.is_empty() {
-                        let client_ip = session
-                            .client_addr()
-                            .map(|a| a.to_string())
-                            .unwrap_or_default();
-                        let client_ip = client_ip
-                            .split(':')
-                            .next()
-                            .unwrap_or(&client_ip)
-                            .to_string();
+                        // Use correct IP extraction that handles IPv6
+                        let client_ip = if let Some(addr) = session.client_addr() {
+                            match addr.as_inet() {
+                                Some(inet_addr) => inet_addr.ip().to_string(),
+                                None => addr.to_string(), // Fallback for UDS or others
+                            }
+                        } else {
+                            String::new()
+                        };
 
                         let mut ip_allowed = true;
                         let mut has_allow_rules = false;

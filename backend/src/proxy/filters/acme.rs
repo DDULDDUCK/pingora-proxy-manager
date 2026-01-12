@@ -20,9 +20,15 @@ impl ProxyFilter for AcmeFilter {
 
         if path.starts_with("/.well-known/acme-challenge/") {
             let token = path.trim_start_matches("/.well-known/acme-challenge/");
-            let file_path = Path::new("/app/data/acme-challenge").join(token);
+            
+            // Use a relative path from the current working directory (which is usually the project root or where binary is run)
+            // instead of a hardcoded absolute path like "/app/data/acme-challenge".
+            // This makes it work on both local dev (./data) and Docker (WORKDIR /app -> ./data).
+            let file_path = Path::new("data/acme-challenge").join(token);
 
-            if token.contains("..") {
+            // Security: Prevent directory traversal attacks
+            if token.contains("..") || token.contains('/') || token.contains('\\') {
+                tracing::warn!("⚠️ Attempted directory traversal in ACME challenge: {}", token);
                 let _ = session.respond_error(constants::http::FORBIDDEN).await;
                 return Ok(FilterResult::Handled);
             }
@@ -53,6 +59,7 @@ impl ProxyFilter for AcmeFilter {
                     return Ok(FilterResult::Handled);
                 }
                 Err(_) => {
+                    tracing::debug!("ACME challenge not found: {:?}", file_path);
                     let _ = session.respond_error(constants::http::NOT_FOUND).await;
                     return Ok(FilterResult::Handled);
                 }
