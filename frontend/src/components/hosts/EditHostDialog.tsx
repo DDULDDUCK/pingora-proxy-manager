@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Edit, RefreshCw, CornerDownRight, ArrowRightLeft, Trash2, Plus } from "lucide-react";
+import { Edit, RefreshCw, CornerDownRight, ArrowRightLeft, Trash2, Plus, ShieldAlert } from "lucide-react";
 import type { Host, Location, Header } from "@/hooks/useHosts";
 import { toast } from "sonner";
 import { useAddHost, useAddLocation, useDeleteLocation, useAddHostHeader, useDeleteHostHeader } from "@/hooks/useHosts";
@@ -28,7 +28,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
   const { data: accessLists } = useAccessLists();
 
   const [editFormHost, setEditFormHost] = useState<Partial<Host>>({});
-  const [newLocation, setNewLocation] = useState<Location>({ path: "/", target: "", scheme: "http", rewrite: false });
+  const [newLocation, setNewLocation] = useState<Location>({ path: "/", target: "", scheme: "http", rewrite: false, verify_ssl: true });
   const [newHeader, setNewHeader] = useState<Omit<Header, 'id'>>({ name: "", value: "", target: "request" });
 
   useEffect(() => {
@@ -37,6 +37,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
             target: host.target,
             scheme: host.scheme,
             ssl_forced: host.ssl_forced,
+            verify_ssl: host.verify_ssl,
             redirect_to: host.redirect_to || "",
             redirect_status: host.redirect_status || 301,
             access_list_id: host.access_list_id || null,
@@ -98,7 +99,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
     if (!host || !newLocation.path || !newLocation.target) return;
     addLocationMutation.mutate({ domain: host.domain, location: newLocation }, {
         onSuccess: () => {
-            setNewLocation({ path: "/", target: "", scheme: "http", rewrite: false });
+            setNewLocation({ path: "/", target: "", scheme: "http", rewrite: false, verify_ssl: true });
         }
     });
   };
@@ -167,6 +168,18 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                     <SelectItem value="https">https://</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="flex items-center space-x-2 mt-1">
+                   <input 
+                     type="checkbox" 
+                     id="edit_verify_ssl" 
+                     className="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary"
+                     checked={editFormHost.verify_ssl ?? true}
+                     onChange={e => setEditFormHost({...editFormHost, verify_ssl: e.target.checked})}
+                   />
+                   <Label htmlFor="edit_verify_ssl" className="cursor-pointer text-xs text-muted-foreground">
+                       Verify SSL (Backend)
+                   </Label>
+                </div>
               </div>
               
               {/* Multi-Target Input for Edit */}
@@ -273,7 +286,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                 </div>
               </div>
               <div className="flex items-end gap-3">
-                <div className="grid gap-1 w-[100px]">
+                <div className="grid gap-1 w-[130px]">
                   <Label>Scheme</Label>
                   <Select value={newLocation.scheme} onValueChange={v => setNewLocation({...newLocation, scheme: v as any})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -282,8 +295,20 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                       <SelectItem value="https">https://</SelectItem>
                     </SelectContent>
                   </Select>
+                  <div className="flex items-center space-x-1 mt-1">
+                      <input 
+                        type="checkbox" 
+                        id="loc_verify_ssl" 
+                        className="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary"
+                        checked={newLocation.verify_ssl ?? true}
+                        onChange={e => setNewLocation({...newLocation, verify_ssl: e.target.checked})}
+                      />
+                      <Label htmlFor="loc_verify_ssl" className="cursor-pointer text-[10px] text-muted-foreground whitespace-nowrap">
+                          Verify SSL
+                      </Label>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2 pb-2.5">
+                <div className="flex items-center space-x-2 pb-6">
                   <input
                     type="checkbox"
                     id="rewrite"
@@ -293,7 +318,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                   />
                   <Label htmlFor="rewrite" className="cursor-pointer">Strip Path</Label>
                 </div>
-                <Button className="ml-auto" onClick={handleAddLocation} disabled={addLocationMutation.isPending}>
+                <Button className="ml-auto mb-3" onClick={handleAddLocation} disabled={addLocationMutation.isPending}>
                   <Plus className="h-4 w-4 mr-2" /> Add
                 </Button>
               </div>
@@ -312,6 +337,11 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                     <Badge variant="outline">{loc.path}</Badge>
                     <span className="text-sm text-slate-500">forwards to</span>
                     <span className="font-mono text-sm">{loc.scheme}://{loc.target}</span>
+                    {loc.verify_ssl === false && (
+                         <Badge variant="destructive" className="text-[10px] flex items-center gap-1">
+                             <ShieldAlert className="h-3 w-3" /> No SSL Verify
+                         </Badge>
+                    )}
                     {loc.rewrite && (
                       <Badge variant="secondary" className="text-[10px] bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
                         <ArrowRightLeft className="mr-1 h-3 w-3 inline" /> Stripped

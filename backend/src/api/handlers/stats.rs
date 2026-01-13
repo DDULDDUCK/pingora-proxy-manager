@@ -44,7 +44,10 @@ pub async fn get_history_stats(
     Ok(Json(rows))
 }
 
-pub async fn get_logs(_: Claims, Query(q): Query<LogsQuery>) -> Result<Json<Vec<String>>, AppError> {
+pub async fn get_logs(
+    _: Claims,
+    Query(q): Query<LogsQuery>,
+) -> Result<Json<Vec<String>>, AppError> {
     let limit = q.lines.unwrap_or(100);
     let log_dir = Path::new("logs");
     let now = chrono::Local::now();
@@ -74,7 +77,9 @@ pub async fn update_error_page(
 ) -> Result<StatusCode, AppError> {
     // Admin만 설정 변경 가능
     if !claims.is_admin() {
-        return Err(AppError::Forbidden("Only admins can update error page".to_string()));
+        return Err(AppError::Forbidden(
+            "Only admins can update error page".to_string(),
+        ));
     }
 
     fs::write("data/templates/error.html", &payload.html)?;

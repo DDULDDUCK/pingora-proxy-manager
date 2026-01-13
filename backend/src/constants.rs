@@ -1,7 +1,7 @@
 /// HTTP Status Codes
 pub mod http {
     use http::StatusCode;
-    
+
     pub const OK: u16 = StatusCode::OK.as_u16();
     pub const FORBIDDEN: u16 = StatusCode::FORBIDDEN.as_u16();
     pub const NOT_FOUND: u16 = StatusCode::NOT_FOUND.as_u16();
@@ -21,7 +21,7 @@ pub mod network {
 /// Certificate Settings
 pub mod cert {
     pub const RSA_BITS: u32 = 2048;
-    pub const VALIDITY_DAYS: u32 = 3650;  // 10 years
+    pub const VALIDITY_DAYS: u32 = 3650; // 10 years
     pub const RENEWAL_THRESHOLD_DAYS: u64 = 30;
 }
 

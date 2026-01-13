@@ -1,8 +1,8 @@
-use async_trait::async_trait;
-use pingora::prelude::*;
-use pingora::http::ResponseHeader;
+use super::{FilterResult, ProxyCtx, ProxyFilter};
 use crate::constants;
-use super::{ProxyFilter, FilterResult, ProxyCtx};
+use async_trait::async_trait;
+use pingora::http::ResponseHeader;
+use pingora::prelude::*;
 
 pub struct RedirectFilter;
 
@@ -58,7 +58,9 @@ impl ProxyFilter for RedirectFilter {
                     return Ok(FilterResult::Handled);
                 }
 
-                session.write_response_header(Box::new(header), true).await?;
+                session
+                    .write_response_header(Box::new(header), true)
+                    .await?;
                 return Ok(FilterResult::Handled);
             }
         }

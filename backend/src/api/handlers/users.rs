@@ -16,7 +16,9 @@ pub async fn list_users(
 ) -> Result<Json<Vec<UserRes>>, AppError> {
     // Admin만 사용자 목록 조회 가능
     if !claims.is_admin() {
-        return Err(AppError::Forbidden("Only admins can list users".to_string()));
+        return Err(AppError::Forbidden(
+            "Only admins can list users".to_string(),
+        ));
     }
 
     let users = db::get_all_users(&state.db_pool).await?;
@@ -41,7 +43,9 @@ pub async fn create_user_handler(
 ) -> Result<StatusCode, AppError> {
     // Admin만 사용자 생성 가능
     if !claims.is_admin() {
-        return Err(AppError::Forbidden("Only admins can create users".to_string()));
+        return Err(AppError::Forbidden(
+            "Only admins can create users".to_string(),
+        ));
     }
 
     let role = payload.role.unwrap_or_else(|| "viewer".to_string());
@@ -54,8 +58,9 @@ pub async fn create_user_handler(
     let hash = auth::hash_password(&payload.password)
         .map_err(|e| AppError::Config(format!("Password hashing failed: {}", e)))?;
 
-    let user_id = db::create_user_with_role(&state.db_pool, &payload.username, &hash, &role).await?;
-    
+    let user_id =
+        db::create_user_with_role(&state.db_pool, &payload.username, &hash, &role).await?;
+
     // 감사 로그
     let _ = db::insert_audit_log(
         &state.db_pool,
@@ -71,7 +76,7 @@ pub async fn create_user_handler(
         None,
     )
     .await;
-    
+
     Ok(StatusCode::CREATED)
 }
 
@@ -83,12 +88,16 @@ pub async fn update_user_handler(
 ) -> Result<StatusCode, AppError> {
     // Admin만 사용자 수정 가능
     if !claims.is_admin() {
-        return Err(AppError::Forbidden("Only admins can update users".to_string()));
+        return Err(AppError::Forbidden(
+            "Only admins can update users".to_string(),
+        ));
     }
 
     // 자기 자신의 역할은 수정 불가 (실수 방지)
     if user_id == claims.user_id && payload.role.is_some() {
-        return Err(AppError::BadRequest("Cannot change your own role".to_string()));
+        return Err(AppError::BadRequest(
+            "Cannot change your own role".to_string(),
+        ));
     }
 
     if let Some(ref role) = payload.role {
@@ -133,7 +142,9 @@ pub async fn delete_user_handler(
 ) -> Result<StatusCode, AppError> {
     // Admin만 사용자 삭제 가능
     if !claims.is_admin() {
-        return Err(AppError::Forbidden("Only admins can delete users".to_string()));
+        return Err(AppError::Forbidden(
+            "Only admins can delete users".to_string(),
+        ));
     }
 
     // 자기 자신은 삭제 불가

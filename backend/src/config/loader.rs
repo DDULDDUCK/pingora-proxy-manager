@@ -35,7 +35,8 @@ impl ConfigLoader {
             let mut locations_map: HashMap<i64, Vec<LocationConfig>> = HashMap::new();
             for loc in loc_rows {
                 // Split comma-separated targets
-                let targets: Vec<String> = loc.target
+                let targets: Vec<String> = loc
+                    .target
                     .split(',')
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
@@ -49,6 +50,7 @@ impl ConfigLoader {
                         targets, // Use Vector
                         scheme: loc.scheme,
                         rewrite: loc.rewrite,
+                        verify_ssl: loc.verify_ssl,
                     });
             }
 
@@ -69,10 +71,13 @@ impl ConfigLoader {
 
             let mut ips_map: HashMap<i64, Vec<AccessListIpConfig>> = HashMap::new();
             for ip in ip_rows {
-                ips_map.entry(ip.list_id).or_default().push(AccessListIpConfig {
-                    ip: ip.ip_address,
-                    action: ip.action,
-                });
+                ips_map
+                    .entry(ip.list_id)
+                    .or_default()
+                    .push(AccessListIpConfig {
+                        ip: ip.ip_address,
+                        action: ip.action,
+                    });
             }
 
             for al in al_rows {
@@ -90,21 +95,25 @@ impl ConfigLoader {
             // 3. Headers (grouped by host_id for ProxyConfig)
             let mut headers_map: HashMap<i64, Vec<HeaderConfig>> = HashMap::new();
             for h in header_rows {
-                headers_map.entry(h.host_id).or_default().push(HeaderConfig {
-                    id: h.id,
-                    name: h.name,
-                    value: h.value,
-                    target: h.target,
-                });
+                headers_map
+                    .entry(h.host_id)
+                    .or_default()
+                    .push(HeaderConfig {
+                        id: h.id,
+                        name: h.name,
+                        value: h.value,
+                        target: h.target,
+                    });
             }
 
             let mut hosts = HashMap::new();
             for row in rows {
                 let locs = locations_map.remove(&row.id).unwrap_or_default();
                 let host_headers = headers_map.get(&row.id).cloned().unwrap_or_default();
-                
+
                 // Split comma-separated targets
-                let targets: Vec<String> = row.target
+                let targets: Vec<String> = row
+                    .target
                     .split(',')
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
@@ -118,6 +127,7 @@ impl ConfigLoader {
                         scheme: row.scheme,
                         locations: locs,
                         ssl_forced: row.ssl_forced,
+                        verify_ssl: row.verify_ssl,
                         redirect_to: row.redirect_to,
                         redirect_status: row.redirect_status as u16,
                         access_list_id: row.access_list_id,

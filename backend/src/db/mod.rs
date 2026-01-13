@@ -34,6 +34,7 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
             target TEXT NOT NULL,
             scheme TEXT NOT NULL DEFAULT 'http',
             ssl_forced BOOLEAN NOT NULL DEFAULT 0,
+            verify_ssl BOOLEAN NOT NULL DEFAULT 1,
             redirect_to TEXT,
             redirect_status INTEGER NOT NULL DEFAULT 301,
             access_list_id INTEGER,
@@ -53,6 +54,11 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
         .execute(&pool)
         .await;
 
+    // 마이그레이션: verify_ssl 컬럼 추가
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN verify_ssl BOOLEAN NOT NULL DEFAULT 1")
+        .execute(&pool)
+        .await;
+
     // Locations (경로별 라우팅) 테이블 생성
     sqlx::query(
         r#"
@@ -63,12 +69,18 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
             target TEXT NOT NULL,
             scheme TEXT NOT NULL DEFAULT 'http',
             rewrite BOOLEAN NOT NULL DEFAULT 0,
+            verify_ssl BOOLEAN NOT NULL DEFAULT 1,
             FOREIGN KEY(host_id) REFERENCES hosts(id) ON DELETE CASCADE
         );
         "#,
     )
     .execute(&pool)
     .await?;
+
+    // 마이그레이션: verify_ssl 컬럼 추가 for locations
+    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN verify_ssl BOOLEAN NOT NULL DEFAULT 1")
+        .execute(&pool)
+        .await;
 
     // Stream (TCP/UDP) 테이블 생성
     sqlx::query(

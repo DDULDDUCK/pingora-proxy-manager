@@ -1,11 +1,11 @@
+use super::{FilterResult, ProxyCtx, ProxyFilter};
+use crate::constants;
 use async_trait::async_trait;
 use bytes::Bytes;
-use pingora::prelude::*;
 use pingora::http::ResponseHeader;
+use pingora::prelude::*;
 use std::path::Path;
 use tokio::fs;
-use crate::constants;
-use super::{ProxyFilter, FilterResult, ProxyCtx};
 
 pub struct AcmeFilter;
 
@@ -20,7 +20,7 @@ impl ProxyFilter for AcmeFilter {
 
         if path.starts_with("/.well-known/acme-challenge/") {
             let token = path.trim_start_matches("/.well-known/acme-challenge/");
-            
+
             // Use a relative path from the current working directory (which is usually the project root or where binary is run)
             // instead of a hardcoded absolute path like "/app/data/acme-challenge".
             // This makes it work on both local dev (./data) and Docker (WORKDIR /app -> ./data).
@@ -28,7 +28,10 @@ impl ProxyFilter for AcmeFilter {
 
             // Security: Prevent directory traversal attacks
             if token.contains("..") || token.contains('/') || token.contains('\\') {
-                tracing::warn!("⚠️ Attempted directory traversal in ACME challenge: {}", token);
+                tracing::warn!(
+                    "⚠️ Attempted directory traversal in ACME challenge: {}",
+                    token
+                );
                 let _ = session.respond_error(constants::http::FORBIDDEN).await;
                 return Ok(FilterResult::Handled);
             }
@@ -48,14 +51,20 @@ impl ProxyFilter for AcmeFilter {
                         let _ = session.respond_error(constants::http::INTERNAL_ERROR).await;
                         return Ok(FilterResult::Handled);
                     }
-                    if let Err(e) = header.insert_header("Content-Length", content.len().to_string()) {
+                    if let Err(e) =
+                        header.insert_header("Content-Length", content.len().to_string())
+                    {
                         tracing::error!("Failed to insert Content-Length header: {}", e);
                         let _ = session.respond_error(constants::http::INTERNAL_ERROR).await;
                         return Ok(FilterResult::Handled);
                     }
 
-                    session.write_response_header(Box::new(header), false).await?;
-                    session.write_response_body(Some(Bytes::from(content)), true).await?;
+                    session
+                        .write_response_header(Box::new(header), false)
+                        .await?;
+                    session
+                        .write_response_body(Some(Bytes::from(content)), true)
+                        .await?;
                     return Ok(FilterResult::Handled);
                 }
                 Err(_) => {

@@ -1,16 +1,16 @@
 pub mod filters;
 
+use self::filters::{FilterResult, ProxyFilter};
 use crate::constants;
 use crate::state::{AppState, HostConfig, LocationConfig};
 use async_trait::async_trait;
 use http::header::HeaderName;
 use pingora::http::ResponseHeader;
 use pingora::prelude::*;
+use rand::prelude::IndexedRandom;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
-use self::filters::{ProxyFilter, FilterResult};
-use rand::prelude::IndexedRandom; // Fix for rand 0.9
+use std::time::Duration; // Fix for rand 0.9
 
 pub struct DynamicProxy {
     pub state: Arc<AppState>,
@@ -37,9 +37,7 @@ impl ProxyHttp for DynamicProxy {
     /// 요청 필터링: ACME Challenge 처리 및 라우팅 정보 조회
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         // 1. 초기 필터 (Host 정보 없이 가능한 것들)
-        let early_filters: Vec<Box<dyn ProxyFilter>> = vec![
-            Box::new(filters::acme::AcmeFilter),
-        ];
+        let early_filters: Vec<Box<dyn ProxyFilter>> = vec![Box::new(filters::acme::AcmeFilter)];
 
         for filter in early_filters {
             if let FilterResult::Handled = filter.request_filter(session, ctx).await? {
@@ -72,7 +70,9 @@ impl ProxyHttp for DynamicProxy {
             ctx.host_config = Some(host_config.clone());
 
             let host_filters: Vec<Box<dyn ProxyFilter>> = vec![
-                Box::new(filters::acl::AclFilter { state: self.state.clone() }),
+                Box::new(filters::acl::AclFilter {
+                    state: self.state.clone(),
+                }),
                 Box::new(filters::redirect::RedirectFilter),
                 Box::new(filters::ssl::SslFilter),
             ];
@@ -123,7 +123,12 @@ impl ProxyHttp for DynamicProxy {
                         new_path.to_string()
                     };
 
-                    upstream_request.set_uri(new_uri.parse().map_err(|e| Error::explain(ErrorType::InternalError, format!("Failed to parse URI: {}", e)))?);
+                    upstream_request.set_uri(new_uri.parse().map_err(|e| {
+                        Error::explain(
+                            ErrorType::InternalError,
+                            format!("Failed to parse URI: {}", e),
+                        )
+                    })?);
                     tracing::info!("🔄 Rewrote path: {} -> {}", original_path, new_path);
                 }
             }
@@ -138,7 +143,12 @@ impl ProxyHttp for DynamicProxy {
                         let _ = upstream_request.remove_header(&header_name);
                         upstream_request
                             .insert_header(header_name, &h.value)
-                            .map_err(|e| Error::explain(ErrorType::InternalError, format!("Failed to insert request header: {}", e)))?;
+                            .map_err(|e| {
+                                Error::explain(
+                                    ErrorType::InternalError,
+                                    format!("Failed to insert request header: {}", e),
+                                )
+                            })?;
                     }
                 }
             }
@@ -162,7 +172,12 @@ impl ProxyHttp for DynamicProxy {
                         let _ = upstream_response.remove_header(&header_name);
                         upstream_response
                             .insert_header(header_name, &h.value)
-                            .map_err(|e| Error::explain(ErrorType::InternalError, format!("Failed to insert response header: {}", e)))?;
+                            .map_err(|e| {
+                                Error::explain(
+                                    ErrorType::InternalError,
+                                    format!("Failed to insert response header: {}", e),
+                                )
+                            })?;
                     }
                 }
             }
@@ -180,18 +195,25 @@ impl ProxyHttp for DynamicProxy {
             // LOAD BALANCING LOGIC:
             // Check matched_location first, then host_config.
             // Both now support multiple targets (Vec<String>).
-            
-            let (targets, scheme) = if let Some(loc) = &ctx.matched_location {
-                (&loc.targets, &loc.scheme)
+
+            let (targets, scheme, verify_ssl) = if let Some(loc) = &ctx.matched_location {
+                (&loc.targets, &loc.scheme, loc.verify_ssl)
             } else {
-                (&host_config.targets, &host_config.scheme)
+                (
+                    &host_config.targets,
+                    &host_config.scheme,
+                    host_config.verify_ssl,
+                )
             };
 
             // Select a target using simple Random Load Balancing
             // If targets is empty (shouldn't happen with valid config), error out.
             let target = if targets.is_empty() {
                 tracing::error!("No upstream targets configured for host: {}", ctx.host);
-                 return Err(Error::explain(ErrorType::HTTPStatus(constants::http::INTERNAL_ERROR), "No upstream targets found"));
+                return Err(Error::explain(
+                    ErrorType::HTTPStatus(constants::http::INTERNAL_ERROR),
+                    "No upstream targets found",
+                ));
             } else {
                 // Pick random
                 let mut rng = rand::rng(); // Fixed for rand 0.9
@@ -199,15 +221,25 @@ impl ProxyHttp for DynamicProxy {
             };
 
             let use_tls = scheme == "https";
-            tracing::info!("Routing {} -> {} (LB: Random/{} targets, TLS: {})", ctx.host, target, targets.len(), use_tls);
+            tracing::info!(
+                "Routing {} -> {} (LB: Random/{} targets, TLS: {}, VerifySSL: {})",
+                ctx.host,
+                target,
+                targets.len(),
+                use_tls,
+                verify_ssl
+            );
 
             let mut peer = Box::new(HttpPeer::new(target, use_tls, ctx.host.clone()));
 
             if use_tls {
                 peer.sni = ctx.host.clone();
+                peer.options.verify_cert = verify_ssl;
+                peer.options.verify_hostname = verify_ssl;
             }
 
-            peer.options.connection_timeout = Some(Duration::from_millis(constants::timeout::CONNECTION_MS));
+            peer.options.connection_timeout =
+                Some(Duration::from_millis(constants::timeout::CONNECTION_MS));
             peer.options.read_timeout = Some(Duration::from_secs(constants::timeout::READ_SECS));
             peer.options.write_timeout = Some(Duration::from_secs(constants::timeout::WRITE_SECS));
 
@@ -215,7 +247,10 @@ impl ProxyHttp for DynamicProxy {
         }
 
         tracing::warn!("No route found for host: {}", ctx.host);
-        Err(Error::explain(ErrorType::HTTPStatus(constants::http::NOT_FOUND), "Host not found"))
+        Err(Error::explain(
+            ErrorType::HTTPStatus(constants::http::NOT_FOUND),
+            "Host not found",
+        ))
     }
 
     /// 요청 로깅 및 통계 집계 (응답 전송 후 호출됨)

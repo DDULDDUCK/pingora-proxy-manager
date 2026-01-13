@@ -13,6 +13,8 @@ pub struct LocationConfig {
     pub scheme: String,
     #[serde(default)]
     pub rewrite: bool,
+    #[serde(default = "default_verify_ssl")]
+    pub verify_ssl: bool,
 }
 
 /// Configuration for a specific virtual host.
@@ -26,6 +28,8 @@ pub struct HostConfig {
     pub locations: Vec<LocationConfig>,
     #[serde(default)]
     pub ssl_forced: bool,
+    #[serde(default = "default_verify_ssl")]
+    pub verify_ssl: bool,
     pub redirect_to: Option<String>,
     #[serde(default = "default_redirect_status")]
     pub redirect_status: u16,
@@ -36,6 +40,10 @@ pub struct HostConfig {
 
 fn default_redirect_status() -> u16 {
     301
+}
+
+fn default_verify_ssl() -> bool {
+    true
 }
 
 // --- New Config Structs ---

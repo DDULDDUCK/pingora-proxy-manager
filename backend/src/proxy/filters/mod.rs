@@ -1,9 +1,9 @@
+use super::ProxyCtx;
 use async_trait::async_trait;
 use pingora::prelude::*;
-use super::ProxyCtx;
 
-pub mod acme;
 pub mod acl;
+pub mod acme;
 pub mod redirect;
 pub mod ssl;
 

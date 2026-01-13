@@ -10,7 +10,10 @@ use axum::{
     http::StatusCode,
 };
 
-pub async fn list_streams(_: Claims, State(state): State<ApiState>) -> Result<Json<Vec<StreamRes>>, AppError> {
+pub async fn list_streams(
+    _: Claims,
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<StreamRes>>, AppError> {
     let rows = db::get_all_streams(&state.db_pool).await?;
     Ok(Json(
         rows.into_iter()
@@ -39,7 +42,7 @@ pub async fn add_stream(
         .protocol
         .clone()
         .unwrap_or_else(|| "tcp".to_string());
-    
+
     db::upsert_stream(
         &state.db_pool,
         payload.listen_port as i64,

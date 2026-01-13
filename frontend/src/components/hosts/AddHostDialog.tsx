@@ -28,6 +28,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
     target: "",
     scheme: "http",
     ssl_forced: false,
+    verify_ssl: true,
     redirect_to: "",
     redirect_status: 301,
     access_list_id: null
@@ -86,12 +87,12 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
         addHostMutation.mutate(hostPayload, {
           onSuccess: () => {
             created++;
-            if (created === domains.length) {
-              onOpenChange(false);
-              setBulkDomains("");
-              setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, redirect_to: "", redirect_status: 301, access_list_id: null });
-              toast.success(`${created} hosts created successfully`);
-            }
+              if (created === domains.length) {
+                onOpenChange(false);
+                setBulkDomains("");
+                setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, verify_ssl: true, redirect_to: "", redirect_status: 301, access_list_id: null });
+                toast.success(`${created} hosts created successfully`);
+              }
           }
         });
       });
@@ -110,7 +111,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
     addHostMutation.mutate(hostPayload, {
       onSuccess: () => {
         onOpenChange(false);
-        setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, redirect_to: "", redirect_status: 301, access_list_id: null });
+        setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, verify_ssl: true, redirect_to: "", redirect_status: 301, access_list_id: null });
       }
     });
   };
@@ -164,6 +165,18 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                      <SelectItem value="https">https://</SelectItem>
                    </SelectContent>
                  </Select>
+                 <div className="flex items-center space-x-2 mt-1">
+                    <input 
+                      type="checkbox" 
+                      id="verify_ssl" 
+                      className="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary"
+                      checked={newHost.verify_ssl ?? true}
+                      onChange={e => setNewHost({...newHost, verify_ssl: e.target.checked})}
+                    />
+                    <Label htmlFor="verify_ssl" className="cursor-pointer text-xs text-muted-foreground">
+                        Verify SSL (Backend)
+                    </Label>
+                 </div>
               </div>
               
               {/* Multi-Target Input Section */}

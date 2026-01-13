@@ -14,7 +14,10 @@ use axum::{
     http::StatusCode,
 };
 
-pub async fn list_hosts(_: Claims, State(state): State<ApiState>) -> Result<Json<Vec<HostRes>>, AppError> {
+pub async fn list_hosts(
+    _: Claims,
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<HostRes>>, AppError> {
     let hosts = state.app_state.config.load();
     let res: Vec<HostRes> = hosts
         .hosts
@@ -22,18 +25,24 @@ pub async fn list_hosts(_: Claims, State(state): State<ApiState>) -> Result<Json
         .map(|(d, c)| HostRes {
             domain: d.clone(),
             // Join Vec<String> back to String for API compatibility
-            target: c.targets.join(","), 
+            target: c.targets.join(","),
             scheme: c.scheme.clone(),
             ssl_forced: c.ssl_forced,
+            verify_ssl: c.verify_ssl,
             redirect_to: c.redirect_to.clone(),
             redirect_status: c.redirect_status,
             // Need to map locations too because they also have targets: Vec<String>
-            locations: c.locations.iter().map(|loc| LocationRes {
-                path: loc.path.clone(),
-                target: loc.targets.join(","),
-                scheme: loc.scheme.clone(),
-                rewrite: loc.rewrite,
-            }).collect(),
+            locations: c
+                .locations
+                .iter()
+                .map(|loc| LocationRes {
+                    path: loc.path.clone(),
+                    target: loc.targets.join(","),
+                    scheme: loc.scheme.clone(),
+                    rewrite: loc.rewrite,
+                    verify_ssl: loc.verify_ssl,
+                })
+                .collect(),
             access_list_id: c.access_list_id,
             headers: c
                 .headers
@@ -61,6 +70,7 @@ pub async fn add_host(
 
     let scheme = payload.scheme.clone().unwrap_or_else(|| "http".to_string());
     let ssl_forced = payload.ssl_forced.unwrap_or(false);
+    let verify_ssl = payload.verify_ssl.unwrap_or(true);
     let redirect_status = payload.redirect_status.unwrap_or(301);
 
     let is_update = db::get_host_id(&state.db_pool, &payload.domain)
@@ -73,6 +83,7 @@ pub async fn add_host(
         &payload.target, // DB expects String, so this is fine (CSV)
         &scheme,
         ssl_forced,
+        verify_ssl,
         payload.redirect_to.clone(),
         redirect_status,
         payload.access_list_id,
@@ -81,8 +92,14 @@ pub async fn add_host(
 
     let action = if is_update { "update" } else { "create" };
     let details = format!(
-        "domain={}, target={}, scheme={}, ssl_forced={}, redirect_to={:?}, access_list_id={:?}",
-        payload.domain, payload.target, scheme, ssl_forced, payload.redirect_to, payload.access_list_id
+        "domain={}, target={}, scheme={}, ssl_forced={}, verify_ssl={}, redirect_to={:?}, access_list_id={:?}",
+        payload.domain,
+        payload.target,
+        scheme,
+        ssl_forced,
+        verify_ssl,
+        payload.redirect_to,
+        payload.access_list_id
     );
     let _ = db::insert_audit_log(
         &state.db_pool,
@@ -143,6 +160,7 @@ pub async fn add_location(
 
     let scheme = payload.scheme.clone().unwrap_or_else(|| "http".to_string());
     let rewrite = payload.rewrite.unwrap_or(false);
+    let verify_ssl = payload.verify_ssl.unwrap_or(true);
 
     db::upsert_location(
         &state.db_pool,
@@ -151,12 +169,13 @@ pub async fn add_location(
         &payload.target, // DB expects String (CSV)
         &scheme,
         rewrite,
+        verify_ssl,
     )
     .await?;
 
     let details = format!(
-        "host={}, path={}, target={}, scheme={}, rewrite={}",
-        domain, payload.path, payload.target, scheme, rewrite
+        "host={}, path={}, target={}, scheme={}, rewrite={}, verify_ssl={}",
+        domain, payload.path, payload.target, scheme, rewrite, verify_ssl
     );
     let _ = db::insert_audit_log(
         &state.db_pool,
@@ -212,7 +231,10 @@ pub async fn list_host_headers(
     AxumPath(domain): AxumPath<String>,
 ) -> Result<Json<Vec<HeaderRes>>, AppError> {
     let hosts = state.app_state.config.load();
-    let host_config = hosts.hosts.get(&domain).ok_or_else(|| AppError::NotFound(format!("Host {} not found", domain)))?;
+    let host_config = hosts
+        .hosts
+        .get(&domain)
+        .ok_or_else(|| AppError::NotFound(format!("Host {} not found", domain)))?;
 
     Ok(Json(
         host_config

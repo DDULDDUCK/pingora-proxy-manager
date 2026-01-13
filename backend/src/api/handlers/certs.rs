@@ -55,7 +55,10 @@ pub async fn request_cert(
     Ok(StatusCode::ACCEPTED)
 }
 
-pub async fn list_certs(_: Claims, State(state): State<ApiState>) -> Result<Json<Vec<CertRes>>, AppError> {
+pub async fn list_certs(
+    _: Claims,
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<CertRes>>, AppError> {
     let rows = db::get_all_certs(&state.db_pool).await?;
     Ok(Json(
         rows.into_iter()
@@ -82,7 +85,11 @@ pub async fn upload_cert(
     let mut key_data = None;
     let mut domain = None;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?
+    {
         let name = field.name().unwrap_or("").to_string();
         if name == "domain" {
             if let Ok(txt) = field.text().await {
@@ -106,7 +113,7 @@ pub async fn upload_cert(
         }
         let cert_path = cert_dir.join(format!("{}.crt", d));
         let key_path = cert_dir.join(format!("{}.key", d));
-        
+
         fs::write(&cert_path, c)?;
         fs::write(&key_path, k)?;
 
@@ -126,7 +133,9 @@ pub async fn upload_cert(
         tracing::info!("💾 Custom certificate uploaded for {}", d);
         return Ok(StatusCode::CREATED);
     }
-    Err(AppError::BadRequest("Missing domain, cert, or key".to_string()))
+    Err(AppError::BadRequest(
+        "Missing domain, cert, or key".to_string(),
+    ))
 }
 
 pub async fn list_dns_providers(

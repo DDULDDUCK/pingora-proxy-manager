@@ -7,6 +7,7 @@ export interface Location {
   target: string;
   scheme: "http" | "https";
   rewrite?: boolean;
+  verify_ssl?: boolean;
 }
 
 export interface Header {
@@ -21,6 +22,7 @@ export interface Host {
   target: string;
   scheme: "http" | "https";
   ssl_forced?: boolean;
+  verify_ssl?: boolean;
   redirect_to?: string | null;
   redirect_status?: number;
   locations?: Location[];

@@ -1,5 +1,5 @@
-use crate::db;
 use crate::auth;
+use crate::db;
 use tracing;
 
 pub async fn init_db(db_url: &str) -> Result<crate::db::DbPool, Box<dyn std::error::Error>> {
@@ -15,7 +15,6 @@ pub async fn init_db(db_url: &str) -> Result<crate::db::DbPool, Box<dyn std::err
         }
     }
 
-    
     // 2. DB 초기화
     let pool = db::init_db(db_url).await?;
 

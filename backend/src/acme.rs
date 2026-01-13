@@ -3,10 +3,10 @@ use crate::state::AppState;
 use std::error::Error;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use tokio::process::Command;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::fs; // Import for setting file permissions
+use tokio::fs;
+use tokio::process::Command; // Import for setting file permissions
 
 pub struct AcmeManager {
     state: Arc<AppState>,
@@ -138,7 +138,10 @@ impl AcmeManager {
 
         let cert_base_path = if fs::try_exists(&cert_base_path_exact).await.unwrap_or(false) {
             cert_base_path_exact
-        } else if fs::try_exists(&cert_base_path_wildcard).await.unwrap_or(false) {
+        } else if fs::try_exists(&cert_base_path_wildcard)
+            .await
+            .unwrap_or(false)
+        {
             cert_base_path_wildcard
         } else {
             return Err(format!(
@@ -151,7 +154,9 @@ impl AcmeManager {
         let privkey_path = cert_base_path.join("privkey.pem");
         let fullchain_path = cert_base_path.join("fullchain.pem");
 
-        if !fs::try_exists(&privkey_path).await.unwrap_or(false) || !fs::try_exists(&fullchain_path).await.unwrap_or(false) {
+        if !fs::try_exists(&privkey_path).await.unwrap_or(false)
+            || !fs::try_exists(&fullchain_path).await.unwrap_or(false)
+        {
             return Err(format!("Certificates not found at {:?}", cert_base_path).into());
         }
 

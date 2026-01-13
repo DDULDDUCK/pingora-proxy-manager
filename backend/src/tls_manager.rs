@@ -178,9 +178,10 @@ impl DynamicCertManager {
         if tokio_fs::try_exists(&cert_path).await.unwrap_or(false)
             && tokio_fs::try_exists(&key_path).await.unwrap_or(false)
         {
-            if let (Ok(cert_pem), Ok(key_pem)) =
-                (tokio_fs::read(&cert_path).await, tokio_fs::read(&key_path).await)
-            {
+            if let (Ok(cert_pem), Ok(key_pem)) = (
+                tokio_fs::read(&cert_path).await,
+                tokio_fs::read(&key_path).await,
+            ) {
                 let pair = CertKeyPair {
                     cert_pem: cert_pem.clone(),
                     key_pem: key_pem.clone(),

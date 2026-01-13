@@ -7,6 +7,7 @@ pub struct HostRow {
     pub target: String,
     pub scheme: String,
     pub ssl_forced: bool,
+    pub verify_ssl: bool,
     pub redirect_to: Option<String>,
     pub redirect_status: i64,
     pub access_list_id: Option<i64>,
@@ -20,6 +21,7 @@ pub struct LocationRow {
     pub target: String,
     pub scheme: String,
     pub rewrite: bool,
+    pub verify_ssl: bool,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -157,6 +159,7 @@ pub async fn delete_header(pool: &DbPool, id: i64) -> Result<(), sqlx::Error> {
 /// * `target` - Upstream target URL
 /// * `scheme` - Upstream scheme ('http' or 'https')
 /// * `ssl_forced` - Whether to force HTTPS
+/// * `verify_ssl` - Whether to verify upstream SSL certificates
 /// * `redirect_to` - Optional redirect URL
 /// * `redirect_status` - HTTP status code for redirect
 /// * `access_list_id` - Optional ID of the access list to apply
@@ -169,18 +172,20 @@ pub async fn upsert_host(
     target: &str,
     scheme: &str,
     ssl_forced: bool,
+    verify_ssl: bool,
     redirect_to: Option<String>,
     redirect_status: i64,
     access_list_id: Option<i64>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO hosts (domain, target, scheme, ssl_forced, redirect_to, redirect_status, access_list_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO hosts (domain, target, scheme, ssl_forced, verify_ssl, redirect_to, redirect_status, access_list_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(domain) DO UPDATE SET 
             target = excluded.target, 
             scheme = excluded.scheme,
             ssl_forced = excluded.ssl_forced,
+            verify_ssl = excluded.verify_ssl,
             redirect_to = excluded.redirect_to,
             redirect_status = excluded.redirect_status,
             access_list_id = excluded.access_list_id
@@ -190,6 +195,7 @@ pub async fn upsert_host(
     .bind(target)
     .bind(scheme)
     .bind(ssl_forced)
+    .bind(verify_ssl)
     .bind(redirect_to)
     .bind(redirect_status)
     .bind(access_list_id)
@@ -223,6 +229,7 @@ pub async fn delete_host(pool: &DbPool, domain: &str) -> Result<(), sqlx::Error>
 /// * `target` - Upstream target URL
 /// * `scheme` - Upstream scheme
 /// * `rewrite` - Whether to enable path rewriting
+/// * `verify_ssl` - Whether to verify upstream SSL certificates
 ///
 /// # Returns
 /// * `Result<(), sqlx::Error>` - Success or a database error
@@ -233,6 +240,7 @@ pub async fn upsert_location(
     target: &str,
     scheme: &str,
     rewrite: bool,
+    verify_ssl: bool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
         .bind(host_id)
@@ -241,13 +249,14 @@ pub async fn upsert_location(
         .await?;
 
     sqlx::query(
-        "INSERT INTO locations (host_id, path, target, scheme, rewrite) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO locations (host_id, path, target, scheme, rewrite, verify_ssl) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(host_id)
     .bind(path)
     .bind(target)
     .bind(scheme)
     .bind(rewrite)
+    .bind(verify_ssl)
     .execute(pool)
     .await?;
     Ok(())

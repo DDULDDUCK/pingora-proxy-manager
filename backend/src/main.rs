@@ -1,15 +1,15 @@
-mod error;
-mod config;
-mod constants;
 mod acme;
 mod api;
 mod auth;
+mod bootstrap;
+mod config;
+mod constants;
 mod db;
+mod error;
 mod proxy;
 mod state;
 mod stream_manager;
 mod tls_manager;
-mod bootstrap;
 
 use crate::proxy::DynamicProxy;
 use crate::state::AppState;
@@ -20,14 +20,15 @@ use pingora::prelude::*;
 use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     // 0. 작업 디렉토리 자동 보정 (backend 폴더에서 실행 시 상위로 이동)
     if let Ok(cwd) = std::env::current_dir() {
         if cwd.ends_with("backend") {
             if let Err(e) = std::env::set_current_dir("..") {
                 eprintln!("Warning: Failed to change directory to project root: {}", e);
             } else {
-                eprintln!("Note: Changed working directory to project root to locate data and logs");
+                eprintln!(
+                    "Note: Changed working directory to project root to locate data and logs"
+                );
             }
         }
     }
@@ -85,7 +86,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 recorder_handle_for_api,
                 stream_manager_for_api,
             );
-            let listener = tokio::net::TcpListener::bind(constants::network::API_PORT_STR).await.unwrap();
+            let listener = tokio::net::TcpListener::bind(constants::network::API_PORT_STR)
+                .await
+                .unwrap();
             tracing::info!("🎮 Control Plane (API) running on port 81");
             axum::serve(listener, app).await.unwrap();
         });
@@ -210,12 +213,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("🔐 TLS with SNI-based dynamic certificate selection enabled");
     } else {
         // 폴백: 디폴트 인증서만 사용
-        my_proxy
-            .add_tls(
-                constants::network::TLS_PORT_STR,
-                "data/certs/default.crt",
-                "data/certs/default.key",
-            )?;
+        my_proxy.add_tls(
+            constants::network::TLS_PORT_STR,
+            "data/certs/default.crt",
+            "data/certs/default.key",
+        )?;
         tracing::info!("🔐 TLS with static default certificate enabled");
     }
 

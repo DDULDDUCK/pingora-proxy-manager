@@ -1,12 +1,12 @@
-use async_trait::async_trait;
-use base64::{engine::general_purpose, Engine as _};
-use pingora::prelude::*;
-use pingora::http::ResponseHeader;
-use std::sync::Arc;
+use super::{FilterResult, ProxyCtx, ProxyFilter};
 use crate::auth;
 use crate::constants;
 use crate::state::AppState;
-use super::{ProxyFilter, FilterResult, ProxyCtx};
+use async_trait::async_trait;
+use base64::{engine::general_purpose, Engine as _};
+use pingora::http::ResponseHeader;
+use pingora::prelude::*;
+use std::sync::Arc;
 
 pub struct AclFilter {
     pub state: Arc<AppState>,
@@ -81,7 +81,9 @@ impl ProxyFilter for AclFilter {
                                     let encoded = &v_str[6..];
                                     if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
                                         if let Ok(creds) = String::from_utf8(decoded) {
-                                            if let Some((username, password)) = creds.split_once(':') {
+                                            if let Some((username, password)) =
+                                                creds.split_once(':')
+                                            {
                                                 if let Some(client_conf) = acl
                                                     .clients
                                                     .iter()
@@ -103,28 +105,39 @@ impl ProxyFilter for AclFilter {
 
                         if !authenticated {
                             tracing::info!("🔒 Authentication required for {}", ctx.host);
-                            let mut header = match ResponseHeader::build(constants::http::UNAUTHORIZED, Some(4)) {
-                                Ok(h) => h,
-                                Err(e) => {
-                                    tracing::error!("Failed to build 401 response header: {}", e);
-                                    let _ = session.respond_error(constants::http::INTERNAL_ERROR).await;
-                                    return Ok(FilterResult::Handled);
-                                }
-                            };
+                            let mut header =
+                                match ResponseHeader::build(constants::http::UNAUTHORIZED, Some(4))
+                                {
+                                    Ok(h) => h,
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to build 401 response header: {}",
+                                            e
+                                        );
+                                        let _ = session
+                                            .respond_error(constants::http::INTERNAL_ERROR)
+                                            .await;
+                                        return Ok(FilterResult::Handled);
+                                    }
+                                };
                             if let Err(e) = header.insert_header(
                                 "WWW-Authenticate",
                                 "Basic realm=\"Restricted Area\"",
                             ) {
                                 tracing::error!("Failed to insert WWW-Authenticate header: {}", e);
-                                let _ = session.respond_error(constants::http::INTERNAL_ERROR).await;
+                                let _ =
+                                    session.respond_error(constants::http::INTERNAL_ERROR).await;
                                 return Ok(FilterResult::Handled);
                             }
                             if let Err(e) = header.insert_header("Content-Length", "0") {
                                 tracing::error!("Failed to insert Content-Length header: {}", e);
-                                let _ = session.respond_error(constants::http::INTERNAL_ERROR).await;
+                                let _ =
+                                    session.respond_error(constants::http::INTERNAL_ERROR).await;
                                 return Ok(FilterResult::Handled);
                             }
-                            session.write_response_header(Box::new(header), true).await?;
+                            session
+                                .write_response_header(Box::new(header), true)
+                                .await?;
                             return Ok(FilterResult::Handled);
                         }
                     }
