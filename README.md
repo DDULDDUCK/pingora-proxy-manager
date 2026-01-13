@@ -1,75 +1,56 @@
-# Pingora Proxy Manager
-<p align="center">
-  <!-- 프로젝트 로고 -->
-  <img width="150" height="150" alt="ppnicon-removebg-preview" src="https://github.com/user-attachments/assets/3c9ec9cd-02f6-4a96-85e8-c125adb628cb" />
-  <br>
-</p>
 <div align="center">
 
-![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
-<a href="https://www.buymeacoffee.com/dduldduck">
-  <img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange.svg?style=for-the-badge&logo=buymeacoffee" alt="Donate" />
-</a>
+<img width="180" height="180" src="https://github.com/user-attachments/assets/3c9ec9cd-02f6-4a96-85e8-c125adb628cb" alt="Pingora Proxy Manager Logo" />
 
-**A high-performance, zero-downtime reverse proxy manager built on Cloudflare's [Pingora](https://github.com/cloudflare/pingora).**
+# Pingora Proxy Manager
 
-Simple, Modern, and Fast. Now supports Wildcard SSL & TCP/UDP Streams!
+**High-Performance • Zero-Downtime • Modern UI**
+
+Built on Cloudflare's [Pingora](https://github.com/cloudflare/pingora) and Rust.
+
+[![GitHub Wiki](https://img.shields.io/badge/Documentation-Wiki-book?style=for-the-badge&logo=gitbook&logoColor=white)](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Hub-blue.svg?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/r/dduldduck/pingora-proxy-manager)
+
+[![Rust](https://img.shields.io/badge/Backend-Rust-black?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![React](https://img.shields.io/badge/Frontend-React_19-black?style=flat-square&logo=react)](https://react.dev/)
+[![Tailwind](https://img.shields.io/badge/Style-Tailwind_CSS-black?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
+
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
 </div>
 
 ---
 
+## 📖 Overview
+
+**Pingora Proxy Manager** is a next-generation reverse proxy solution designed for speed and reliability. It combines the raw performance of Rust and Cloudflare's Pingora framework with a beautiful, modern React dashboard.
+
+Unlike traditional proxies, PPM supports **zero-downtime configuration reloading**, meaning your active connections are never dropped when you add hosts or change SSL settings.
+
+<img width="1302" height="724" alt="image" src="https://github.com/user-attachments/assets/aeb84f5a-5db8-4f8a-94cc-d355301907f4" />
+<img width="1301" height="707" alt="image" src="https://github.com/user-attachments/assets/62add77b-a909-4ffb-8102-3b57c2007c3b" />
+<img width="1289" height="637" alt="image" src="https://github.com/user-attachments/assets/9d0e3a07-f79a-4f45-9fe3-d97ae9867fef" />
+<img width="1301" height="538" alt="image" src="https://github.com/user-attachments/assets/a1dfd699-492f-4218-8a23-579e9fdb17aa" />
+
 ## ✨ Features
 
-- **⚡️ High Performance:** Built on Rust & Pingora, capable of handling high traffic with low latency.
-- **🔄 Zero-Downtime Configuration:** Dynamic reconfiguration without restarting the process.
-- **🔒 SSL/TLS Automation:** 
-  - **HTTP-01:** Standard challenge for single domains.
-  - **DNS-01:** **Wildcard certificate support** (`*.example.com`) via Cloudflare, AWS Route53, etc. (powered by Certbot).
-- **🌐 Proxy Hosts:** Easy management of virtual hosts, locations, and path rewriting.
-- **📡 Streams (L4):** TCP and UDP forwarding for databases, game servers, etc.
-- **🛡️ Access Control:** IP whitelisting/blacklisting and Basic Authentication support.
-- **🎨 Modern Dashboard:** Clean and responsive UI built with React, Tailwind CSS, and shadcn/ui.
-- **🐳 Docker Ready:** Single container deployment for easy setup and maintenance.
+| Feature | Description |
+| :--- | :--- |
+| **⚡️ High Performance** | Powered by **Rust** & **Pingora** for ultra-low latency and high throughput. |
+| **🔄 Zero-Downtime** | Dynamic architecture allows configuration changes without restarting the process. |
+| **🔒 SSL Automation** | **HTTP-01** and **DNS-01 (Wildcard)** support via Let's Encrypt. |
+| **🌐 Proxy Hosts** | Easy management of virtual hosts, path routing, and advanced rewriting. |
+| **📡 L4 Streams** | **TCP/UDP** forwarding for databases, game servers, and other non-HTTP services. |
+| **🛡️ Access Control** | Secure your services with IP Whitelists/Blacklists and Basic Authentication. |
+| **📊 Real-time Stats** | Live traffic monitoring, status codes, and historical data visualization. |
+| **🐳 Docker Ready** | Single-container deployment with a lightweight footprint. |
 
-## ❤️ Support the Development
+## 🚀 Quick Start
 
-**Is Pingora Proxy Manager saving you time?**
+The fastest way to get started is using **Docker Compose**.
 
-This project is built with love, caffeine, and many sleepless nights to provide a high-performance, free alternative for the community. Maintaining an open-source project takes significant effort. 
-
-If you'd like to support the ongoing development, bug fixes, and new features, please consider buying me a coffee! ☕️
-
-<div align="center">
-  <a href="https://www.buymeacoffee.com/dduldduck" target="_blank">
-    <img width="400" alt="Buy Me A Coffee" src="https://github.com/user-attachments/assets/120ade05-f821-4a0a-913a-03b6532ce77b" />
-  </a>
-  <p><i>Your support keeps the code flowing.</i></p>
-</div>
-
-## 🚀 Getting Started
-
-### Quick Start (Docker Hub)
-
-You can run the pre-built image directly from Docker Hub.
-
-**Using Docker CLI:**
-```bash
-docker run -d \
-  --name pingora-proxy \
-  -p 80:8080 \
-  -p 81:81 \
-  -v ./data:/app/data \
-  -v ./logs:/app/logs \
-  dduldduck/pingora-proxy-manager:latest
-```
-
-**Using Docker Compose:**
-Create a `docker-compose.yml`:
+### 1. Create `docker-compose.yml`
 
 ```yaml
 services:
@@ -77,83 +58,72 @@ services:
     image: dduldduck/pingora-proxy-manager:latest
     container_name: pingora-proxy
     restart: always
-    ports:
-      - "80:8080"   # HTTP Proxy (Backend listens on 8080)
-      - "81:81"     # Dashboard/API (Backend listens on 81)
-      # Map 443 if you want to serve HTTPS directly (requires privilege or capability)
-      # - "443:443" 
+    network_mode: host # Recommended for performance & L4 streams
     volumes:
-      - ./data:/app/data        # DB and Certs persistence
-      - ./logs:/app/logs        # Logs persistence
+      - ./data:/app/data        # Database & Certs
+      - ./logs:/app/logs        # Access Logs
     environment:
       - JWT_SECRET=changeme_in_production_please
       - RUST_LOG=info
 ```
 
-Then run:
+> **Note**: We recommend `network_mode: host` for best performance and simplified port management. If you prefer bridge mode, ensure you map ports `80:8080`, `443:443`, and `81:81`.
+
+### 2. Start the Service
+
 ```bash
 docker compose up -d
 ```
 
-### Access the Dashboard
-- Open your browser and go to `http://localhost:81`.
-- **Default Credentials:**
-  - Username: `admin`
-  - Password: `changeme` (Please change this immediately!)
+### 3. Access Dashboard
 
-## 🛠️ Building from Source
+Visit **http://localhost:81** (or your server IP) and log in:
 
-If you want to build the image yourself:
+*   **Username:** `admin`
+*   **Password:** `changeme`
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/dduldduck/pingora-proxy-manager.git
-   cd pingora-proxy-manager
-   ```
+> ⚠️ **Important:** Please change your password immediately after logging in.
 
-2. **Build and Start:**
-   ```bash
-   docker compose up --build -d
-   ```
+## 📚 Documentation
 
-## 📦 Development
+We have comprehensive documentation available in our **GitHub Wiki**:
 
-### Native Development (Recommended)
+*   **[Getting Started](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/Getting-Started)** - Installation and first steps.
+*   **[Configuration Guide](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/Configuration-Guide)** - Deep dive into Proxy Hosts, SSL, and ACLs.
+*   **[Architecture](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/Architecture)** - Understand the Control Plane and Data Plane.
+*   **[API Reference](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/API-Documentation)** - Integrate with our REST API.
+*   **[FAQ & Troubleshooting](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/FAQ)** - Common solutions.
 
-You can run the backend and frontend locally without Docker for faster iteration.
+## 🛠️ Development
 
-**1. Start Backend:**
-The backend will automatically detect it's running in dev mode and use the project root `data/` folder.
-```bash
-# Terminal 1
-cd backend
-cargo run
-# Backend listens on 0.0.0.0:81 (API) and 0.0.0.0:8080 (Proxy)
-```
+Want to contribute or build from source?
 
-**2. Start Frontend:**
-The frontend dev server is configured to proxy API requests to `localhost:81`.
-```bash
-# Terminal 2
-cd frontend
-npm install
-npm run dev
-# Open http://localhost:5173 (or the port shown in terminal)
-```
+### Native Development
+You can run the backend (Rust) and frontend (React/Vite) independently for faster iteration.
 
-### Docker Development
+1.  **Backend**: `cd backend && cargo run` (Listens on 81 & 8080)
+2.  **Frontend**: `cd frontend && npm run dev` (Proxies API to 81)
 
-If you prefer to test the production build locally:
+See the **[Development Setup](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/Development-Setup)** guide for details.
 
-```bash
-# Uses docker-compose.dev.yml to build from local source
-docker compose -f docker-compose.dev.yml up --build
-```
+## ❤️ Support the Project
+
+**Is Pingora Proxy Manager saving you time?**
+
+This project is built with love, caffeine, and many sleepless nights. If you'd like to support the development, server costs, and new features, consider buying me a coffee! ☕️
+
+<div align="center">
+  <a href="https://www.buymeacoffee.com/dduldduck" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="180" />
+  </a>
+</div>
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+Please check our **[Contributing Guide](https://github.com/DDULDDUCK/pingora-proxy-manager/wiki/Contributing-Guide)** for guidelines.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
