@@ -11,6 +11,7 @@ pub struct HostRow {
     pub redirect_to: Option<String>,
     pub redirect_status: i64,
     pub access_list_id: Option<i64>,
+    pub upstream_sni: Option<String>,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -22,6 +23,7 @@ pub struct LocationRow {
     pub scheme: String,
     pub rewrite: bool,
     pub verify_ssl: bool,
+    pub upstream_sni: Option<String>,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -173,19 +175,21 @@ pub async fn upsert_host(
     scheme: &str,
     ssl_forced: bool,
     verify_ssl: bool,
+    upstream_sni: Option<String>,
     redirect_to: Option<String>,
     redirect_status: i64,
     access_list_id: Option<i64>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO hosts (domain, target, scheme, ssl_forced, verify_ssl, redirect_to, redirect_status, access_list_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO hosts (domain, target, scheme, ssl_forced, verify_ssl, upstream_sni, redirect_to, redirect_status, access_list_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(domain) DO UPDATE SET 
             target = excluded.target, 
             scheme = excluded.scheme,
             ssl_forced = excluded.ssl_forced,
             verify_ssl = excluded.verify_ssl,
+            upstream_sni = excluded.upstream_sni,
             redirect_to = excluded.redirect_to,
             redirect_status = excluded.redirect_status,
             access_list_id = excluded.access_list_id
@@ -196,6 +200,7 @@ pub async fn upsert_host(
     .bind(scheme)
     .bind(ssl_forced)
     .bind(verify_ssl)
+    .bind(upstream_sni)
     .bind(redirect_to)
     .bind(redirect_status)
     .bind(access_list_id)
@@ -241,6 +246,7 @@ pub async fn upsert_location(
     scheme: &str,
     rewrite: bool,
     verify_ssl: bool,
+    upstream_sni: Option<String>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
         .bind(host_id)
@@ -249,7 +255,7 @@ pub async fn upsert_location(
         .await?;
 
     sqlx::query(
-        "INSERT INTO locations (host_id, path, target, scheme, rewrite, verify_ssl) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO locations (host_id, path, target, scheme, rewrite, verify_ssl, upstream_sni) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(host_id)
     .bind(path)
@@ -257,6 +263,7 @@ pub async fn upsert_location(
     .bind(scheme)
     .bind(rewrite)
     .bind(verify_ssl)
+    .bind(upstream_sni)
     .execute(pool)
     .await?;
     Ok(())

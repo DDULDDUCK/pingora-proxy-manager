@@ -35,10 +35,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     openssl \
     certbot \
+    python3-pip \
     python3-certbot-dns-cloudflare \
     python3-certbot-dns-route53 \
     python3-certbot-dns-digitalocean \
     python3-certbot-dns-google \
+    && pip install --no-cache-dir --break-system-packages certbot-dns-hetzner \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries and assets

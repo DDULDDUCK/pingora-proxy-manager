@@ -19,6 +19,7 @@ pub struct CreateHostReq {
     pub scheme: Option<String>,
     pub ssl_forced: Option<bool>,
     pub verify_ssl: Option<bool>,
+    pub upstream_sni: Option<String>,
     pub redirect_to: Option<String>,
     pub redirect_status: Option<i64>,
     pub access_list_id: Option<i64>,
@@ -31,6 +32,7 @@ pub struct CreateLocationReq {
     pub scheme: Option<String>,
     pub rewrite: Option<bool>,
     pub verify_ssl: Option<bool>,
+    pub upstream_sni: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -45,6 +47,7 @@ pub struct LocationRes {
     pub scheme: String,
     pub rewrite: bool,
     pub verify_ssl: bool,
+    pub upstream_sni: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -54,6 +57,7 @@ pub struct HostRes {
     pub scheme: String,
     pub ssl_forced: bool,
     pub verify_ssl: bool,
+    pub upstream_sni: Option<String>,
     pub redirect_to: Option<String>,
     pub redirect_status: u16,
     pub locations: Vec<LocationRes>,

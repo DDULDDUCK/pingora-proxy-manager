@@ -31,6 +31,7 @@ pub async fn list_hosts(
             verify_ssl: c.verify_ssl,
             redirect_to: c.redirect_to.clone(),
             redirect_status: c.redirect_status,
+            upstream_sni: c.upstream_sni.clone(),
             // Need to map locations too because they also have targets: Vec<String>
             locations: c
                 .locations
@@ -41,6 +42,7 @@ pub async fn list_hosts(
                     scheme: loc.scheme.clone(),
                     rewrite: loc.rewrite,
                     verify_ssl: loc.verify_ssl,
+                    upstream_sni: loc.upstream_sni.clone(),
                 })
                 .collect(),
             access_list_id: c.access_list_id,
@@ -84,6 +86,7 @@ pub async fn add_host(
         &scheme,
         ssl_forced,
         verify_ssl,
+        payload.upstream_sni.clone(),
         payload.redirect_to.clone(),
         redirect_status,
         payload.access_list_id,
@@ -92,12 +95,13 @@ pub async fn add_host(
 
     let action = if is_update { "update" } else { "create" };
     let details = format!(
-        "domain={}, target={}, scheme={}, ssl_forced={}, verify_ssl={}, redirect_to={:?}, access_list_id={:?}",
+        "domain={}, target={}, scheme={}, ssl_forced={}, verify_ssl={}, upstream_sni={:?}, redirect_to={:?}, access_list_id={:?}",
         payload.domain,
         payload.target,
         scheme,
         ssl_forced,
         verify_ssl,
+        payload.upstream_sni,
         payload.redirect_to,
         payload.access_list_id
     );
@@ -170,12 +174,13 @@ pub async fn add_location(
         &scheme,
         rewrite,
         verify_ssl,
+        payload.upstream_sni.clone(),
     )
     .await?;
 
     let details = format!(
-        "host={}, path={}, target={}, scheme={}, rewrite={}, verify_ssl={}",
-        domain, payload.path, payload.target, scheme, rewrite, verify_ssl
+        "host={}, path={}, target={}, scheme={}, rewrite={}, verify_ssl={}, upstream_sni={:?}",
+        domain, payload.path, payload.target, scheme, rewrite, verify_ssl, payload.upstream_sni
     );
     let _ = db::insert_audit_log(
         &state.db_pool,

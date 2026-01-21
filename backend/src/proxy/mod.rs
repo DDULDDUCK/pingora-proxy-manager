@@ -196,13 +196,19 @@ impl ProxyHttp for DynamicProxy {
             // Check matched_location first, then host_config.
             // Both now support multiple targets (Vec<String>).
 
-            let (targets, scheme, verify_ssl) = if let Some(loc) = &ctx.matched_location {
-                (&loc.targets, &loc.scheme, loc.verify_ssl)
+            let (targets, scheme, verify_ssl, upstream_sni) = if let Some(loc) = &ctx.matched_location {
+                (
+                    &loc.targets,
+                    &loc.scheme,
+                    loc.verify_ssl,
+                    loc.upstream_sni.as_ref(),
+                )
             } else {
                 (
                     &host_config.targets,
                     &host_config.scheme,
                     host_config.verify_ssl,
+                    host_config.upstream_sni.as_ref(),
                 )
             };
 
@@ -221,19 +227,22 @@ impl ProxyHttp for DynamicProxy {
             };
 
             let use_tls = scheme == "https";
+            let sni = upstream_sni.cloned().unwrap_or_else(|| ctx.host.clone());
+
             tracing::info!(
-                "Routing {} -> {} (LB: Random/{} targets, TLS: {}, VerifySSL: {})",
+                "Routing {} -> {} (LB: Random/{} targets, TLS: {}, VerifySSL: {}, SNI: {})",
                 ctx.host,
                 target,
                 targets.len(),
                 use_tls,
-                verify_ssl
+                verify_ssl,
+                sni
             );
 
-            let mut peer = Box::new(HttpPeer::new(target, use_tls, ctx.host.clone()));
+            let mut peer = Box::new(HttpPeer::new(target, use_tls, sni.clone()));
 
             if use_tls {
-                peer.sni = ctx.host.clone();
+                peer.sni = sni;
                 peer.options.verify_cert = verify_ssl;
                 peer.options.verify_hostname = verify_ssl;
             }

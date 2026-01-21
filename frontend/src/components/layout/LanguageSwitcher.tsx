@@ -21,6 +21,7 @@ interface Language {
 const SUPPORTED_LANGUAGES: readonly Language[] = [
   { code: 'en', name: 'English', flag: '🇬🇧', nativeName: 'English' },
   { code: 'it', name: 'Italian', flag: '🇮🇹', nativeName: 'Italiano' },
+  { code: 'ko', name: 'Korean', flag: '🇰🇷', nativeName: '한국어' },
 ] as const;
 
 /**

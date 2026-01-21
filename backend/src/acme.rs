@@ -97,6 +97,13 @@ impl AcmeManager {
                         .arg("--dns-google-credentials")
                         .arg(&temp_path);
                 }
+                "hetzner" => {
+                    cmd.arg("--dns-hetzner")
+                        .arg("--dns-hetzner-credentials")
+                        .arg(&temp_path)
+                        .arg("--dns-hetzner-propagation-seconds")
+                        .arg("60");
+                }
                 _ => {
                     return Err(
                         format!("Unsupported provider type: {}", provider.provider_type).into(),

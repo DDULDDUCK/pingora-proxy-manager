@@ -41,6 +41,7 @@ aws_secret_access_key = YOUR_SECRET_ACCESS_KEY
 # aws_session_token = YOUR_SESSION_TOKEN (Optional, for temporary credentials)`,
   google: `google_cloud_dns_service_account_json = { /* YOUR GCP SERVICE ACCOUNT JSON HERE */ }`, // Note: Certbot expects JSON content directly
   digitalocean: "dns_digitalocean_api_token = YOUR_DIGITALOCEAN_API_TOKEN",
+  hetzner: "dns_hetzner_api_token = YOUR_HETZNER_API_TOKEN",
 };
 
 export function CertificatesTab() {
@@ -325,6 +326,7 @@ function DnsProviders() {
                     <SelectItem value="route53">{t('certificates.route53')}</SelectItem>
                     <SelectItem value="digitalocean">{t('certificates.digitalocean')}</SelectItem>
                     <SelectItem value="google">{t('certificates.googleCloudDns')}</SelectItem>
+                    <SelectItem value="hetzner">{t('certificates.hetzner')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

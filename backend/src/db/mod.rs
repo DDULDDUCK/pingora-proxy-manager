@@ -38,6 +38,7 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
             redirect_to TEXT,
             redirect_status INTEGER NOT NULL DEFAULT 301,
             access_list_id INTEGER,
+            upstream_sni TEXT,
             FOREIGN KEY(access_list_id) REFERENCES access_lists(id)
         );
         "#,
@@ -46,16 +47,17 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     .await?;
 
     // 마이그레이션: access_list_id 컬럼이 없으면 추가 (기존 DB 호환성)
-    // Note: SQLite에서 컬럼 존재 여부 확인 후 추가하는 로직은 복잡하므로,
-    // 단순하게 실패를 허용하는 방식으로 시도하거나(pragmatic approach),
-    // 아래 쿼리는 컬럼이 없을 때만 성공하도록 작성할 수는 없으므로
-    // 에러를 무시하는 방식으로 처리합니다.
     let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN access_list_id INTEGER")
         .execute(&pool)
         .await;
 
     // 마이그레이션: verify_ssl 컬럼 추가
     let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN verify_ssl BOOLEAN NOT NULL DEFAULT 1")
+        .execute(&pool)
+        .await;
+
+    // 마이그레이션: upstream_sni 컬럼 추가
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN upstream_sni TEXT")
         .execute(&pool)
         .await;
 
@@ -70,6 +72,7 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
             scheme TEXT NOT NULL DEFAULT 'http',
             rewrite BOOLEAN NOT NULL DEFAULT 0,
             verify_ssl BOOLEAN NOT NULL DEFAULT 1,
+            upstream_sni TEXT,
             FOREIGN KEY(host_id) REFERENCES hosts(id) ON DELETE CASCADE
         );
         "#,
@@ -79,6 +82,11 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
 
     // 마이그레이션: verify_ssl 컬럼 추가 for locations
     let _ = sqlx::query("ALTER TABLE locations ADD COLUMN verify_ssl BOOLEAN NOT NULL DEFAULT 1")
+        .execute(&pool)
+        .await;
+
+    // 마이그레이션: upstream_sni 컬럼 추가 for locations
+    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN upstream_sni TEXT")
         .execute(&pool)
         .await;
 

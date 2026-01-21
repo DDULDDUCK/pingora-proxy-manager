@@ -51,6 +51,7 @@ impl ConfigLoader {
                         scheme: loc.scheme,
                         rewrite: loc.rewrite,
                         verify_ssl: loc.verify_ssl,
+                        upstream_sni: loc.upstream_sni,
                     });
             }
 
@@ -128,6 +129,7 @@ impl ConfigLoader {
                         locations: locs,
                         ssl_forced: row.ssl_forced,
                         verify_ssl: row.verify_ssl,
+                        upstream_sni: row.upstream_sni,
                         redirect_to: row.redirect_to,
                         redirect_status: row.redirect_status as u16,
                         access_list_id: row.access_list_id,
