@@ -4,6 +4,8 @@ on:
   push:
     branches: [ "master", "main" ]
     tags: [ 'v*.*.*' ]
+  release:
+    types: [published]
   # PRs don't trigger Docker build to save time (CI.yml handles checks)
   workflow_dispatch:
 

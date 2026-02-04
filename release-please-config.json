@@ -1,0 +1,24 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "pingora-proxy-manager",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "include-component-in-tag": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "backend/Cargo.toml",
+          "jsonpath": "$.package.version"
+        }
+      ]
+    }
+  },
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+}
