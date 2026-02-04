@@ -20,7 +20,7 @@ export function LogsTab() {
       <CardContent>
         <div className="h-[500px] overflow-y-auto font-mono text-xs space-y-1 p-2 bg-zinc-950 rounded border border-zinc-800">
           {!logs || logs.length === 0 ? (
-             <div className="text-zinc-500 italic">No logs available or waiting for traffic...</div>
+             <div className="text-zinc-500 italic">{t('logs.noLogs')}</div>
           ) : (
              logs.map((line, i) => (
                <div key={i} className="break-all border-b border-zinc-900/50 pb-0.5 mb-0.5">

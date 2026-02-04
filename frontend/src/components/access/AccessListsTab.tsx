@@ -129,7 +129,7 @@ export function AccessListsTab() {
                     <div className="grid gap-4 py-4">
                       <div className="grid gap-2">
                         <Label>{t('access.name')}</Label>
-                        <Input value={newListName} onChange={e => setNewListName(e.target.value)} placeholder="Internal Admins" />
+                        <Input value={newListName} onChange={e => setNewListName(e.target.value)} placeholder={t('access.listPlaceholder')} />
                       </div>
                     </div>
                     <DialogFooter>
@@ -186,7 +186,7 @@ export function AccessListsTab() {
                ))}
                {(!accessLists || accessLists.length === 0) && (
                    <TableRow>
-                       <TableCell colSpan={4} className="text-center text-muted-foreground h-24">No access lists found.</TableCell>
+                       <TableCell colSpan={4} className="text-center text-muted-foreground h-24">{t('access.noListsFound')}</TableCell>
                    </TableRow>
                )}
              </TableBody>
@@ -218,16 +218,17 @@ export function AccessListsTab() {
                        </div>
                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
                            {currentEditingList?.clients.map(client => (
-                               <div key={client.username} className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm">
-                                   <span className="flex items-center"><User className="h-3 w-3 mr-2 text-slate-500"/>{client.username}</span>
+                               <div key={client.username} className="flex items-center justify-between p-2 bg-muted rounded text-sm">
+                                   <span className="flex items-center"><User className="h-3 w-3 mr-2 text-muted-foreground"/>{client.username}</span>
                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleRemoveClient(client.username)} disabled={removeClientMutation.isPending}>
                                        <X className="h-3 w-3 text-red-500"/>
                                    </Button>
                                </div>
-                           ))}
-                           {currentEditingList?.clients.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No users</p>}
-                       </div>
-                   </div>
+                            ))}
+                            {currentEditingList?.clients.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">{t('access.noUsers')}</p>}
+                        </div>
+                    </div>
+
 
                    {/* IPs Column */}
                    <div className="space-y-4">
@@ -253,7 +254,7 @@ export function AccessListsTab() {
                        </div>
                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
                            {currentEditingList?.ips.map(ip => (
-                               <div key={ip.ip} className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm">
+                               <div key={ip.ip} className="flex items-center justify-between p-2 bg-muted rounded text-sm">
                                    <span className="flex items-center">
                                        {ip.action === 'allow' ? <Shield className="h-3 w-3 mr-2 text-green-600"/> : <Globe className="h-3 w-3 mr-2 text-red-500"/>}
                                        <span className={ip.action === 'deny' ? 'text-red-700' : 'text-green-700'}>{ip.ip}</span>
@@ -262,10 +263,11 @@ export function AccessListsTab() {
                                        <X className="h-3 w-3 text-red-500"/>
                                    </Button>
                                </div>
-                           ))}
-                           {currentEditingList?.ips.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No IP rules</p>}
-                       </div>
-                   </div>
+                            ))}
+                            {currentEditingList?.ips.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">{t('access.noIpRules')}</p>}
+                        </div>
+                    </div>
+
                </div>
            </DialogContent>
        </Dialog>

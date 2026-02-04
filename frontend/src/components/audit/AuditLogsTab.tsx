@@ -37,18 +37,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const actionColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  login: "default",
-  create: "default",
-  update: "secondary",
-  delete: "destructive",
-  change_password: "outline",
-  request: "default",
-  upload: "default",
-  add_client: "secondary",
-  remove_client: "destructive",
-  add_ip: "secondary",
-  remove_ip: "destructive",
+const actionColors: Record<string, string> = {
+  login: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/20",
+  create: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 hover:bg-green-500/20",
+  update: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20",
+  delete: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20 hover:bg-red-500/20",
+  change_password: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/20 hover:bg-zinc-500/20",
+  request: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20 hover:bg-purple-500/20",
+  upload: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20",
+  add_client: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 hover:bg-green-500/20",
+  remove_client: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20 hover:bg-red-500/20",
+  add_ip: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 hover:bg-green-500/20",
+  remove_ip: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20 hover:bg-red-500/20",
 };
 
 const actionLabels: Record<string, string> = {
@@ -151,13 +151,13 @@ export function AuditLogsTab() {
             />
           </div>
           <div className="flex-1 space-y-1">
-            <Label htmlFor="resource-filter">Resource Type</Label>
+            <Label htmlFor="resource-filter">{t('audit.resourceType')}</Label>
             <Select value={resourceFilter} onValueChange={setResourceFilter}>
               <SelectTrigger>
-                <SelectValue placeholder="All resources" />
+                <SelectValue placeholder={t('audit.allResources')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All resources</SelectItem>
+                <SelectItem value="all">{t('audit.allResources')}</SelectItem>
                 <SelectItem value="session">Session</SelectItem>
                 <SelectItem value="user">User</SelectItem>
                 <SelectItem value="host">Host</SelectItem>
@@ -208,7 +208,7 @@ export function AuditLogsTab() {
                     </TableCell>
                     <TableCell className="font-medium">{log.username}</TableCell>
                     <TableCell>
-                      <Badge variant={actionColors[log.action] || "default"}>
+                      <Badge variant="outline" className={actionColors[log.action] || ""}>
                         {actionLabels[log.action] || log.action}
                       </Badge>
                     </TableCell>
@@ -284,7 +284,7 @@ export function AuditLogsTab() {
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">Action</Label>
                     <div>
-                      <Badge variant={actionColors[selectedLog.action] || "default"}>
+                      <Badge variant="outline" className={actionColors[selectedLog.action] || ""}>
                         {actionLabels[selectedLog.action] || selectedLog.action}
                       </Badge>
                     </div>

@@ -171,7 +171,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                   <Input 
                     value={newHost.domain} 
                     onChange={e => setNewHost({...newHost, domain: e.target.value})} 
-                    placeholder="example.com" 
+                    placeholder={t('hosts.domainPlaceholder')} 
                   />
                 )}
                 {bulkMode && (
@@ -191,7 +191,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                 <Label htmlFor="ssl_forced" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   {t('hosts.forceSsl')}
                 </Label>
-                <Badge variant="outline" className="text-[10px] bg-yellow-50 text-yellow-700 border-yellow-200">HTTPS Only</Badge>
+                <Badge variant="outline" className="text-[10px] bg-yellow-50 text-yellow-700 border-yellow-200">{t('hosts.httpsOnly')}</Badge>
               </div>
             </div>
           </Section>
@@ -251,7 +251,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                       <Input 
                         value={t_val} 
                         onChange={e => handleTargetChange(idx, e.target.value)} 
-                        placeholder={idx === 0 ? "127.0.0.1:8080" : "10.0.0.2:8080"} 
+                        placeholder={idx === 0 ? t('hosts.targetPlaceholder') : "10.0.0.2:8080"} 
                         className="flex-1 text-sm font-mono"
                       />
                       {getTargets().length > 1 && (
@@ -301,8 +301,8 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                   <Select value={newHost.redirect_status?.toString()} onValueChange={v => setNewHost({...newHost, redirect_status: parseInt(v)})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="301">301 (Permanent)</SelectItem>
-                      <SelectItem value="302">302 (Temporary)</SelectItem>
+                      <SelectItem value="301">301 ({t('common.permanent')})</SelectItem>
+                      <SelectItem value="302">302 ({t('common.temporary')})</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

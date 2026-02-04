@@ -2,7 +2,7 @@ import { useState, createContext, useContext } from "react";
 import { Toaster, toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import {
-  Lock, LogOut, Loader2
+  Lock, Loader2
 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -10,7 +10,6 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -26,6 +25,8 @@ import { UsersTab } from "@/components/users/UsersTab";
 import { AuditLogsTab } from "@/components/audit/AuditLogsTab";
 import { CertificatesTab } from "@/components/dns/CertificatesTab";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
+import { ModeToggle } from "@/components/mode-toggle";
+import { UserNav } from "@/components/layout/UserNav";
 import { useCurrentUser, type User } from "@/hooks/useUsers";
 import { api } from "@/lib/api";
 import ppnIcon from '@/assets/ppnicon.png';
@@ -98,9 +99,10 @@ function App() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Toaster position="top-center" />
-        <div className="absolute top-4 right-4">
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <ModeToggle />
           <LanguageSwitcher />
         </div>
         <Card className="w-full max-w-sm shadow-lg">
@@ -158,16 +160,10 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
   
   const isAdmin = user?.role === "admin";
   const canManageHosts = user?.role === "admin" || user?.role === "operator";
-  
-  const roleColors: Record<string, string> = {
-    admin: "bg-red-100 text-red-700 border-red-200",
-    operator: "bg-blue-100 text-blue-700 border-blue-200",
-    viewer: "bg-gray-100 text-gray-700 border-gray-200",
-  };
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, canManageHosts, isLoading: userLoading }}>
-      <div className="min-h-screen bg-slate-50/50 p-6 md:p-10">
+      <div className="min-h-screen bg-background p-6 md:p-10 transition-colors duration-300">
         <Toaster position="top-right" />
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
@@ -177,7 +173,7 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
                 <img src={ppnIcon} alt="App Icon" className="h-8 w-8" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
                   {t('app.mainTitle')}
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -185,21 +181,10 @@ function MainLayout({ onLogout }: { onLogout: () => void }) {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
+              <ModeToggle />
               <LanguageSwitcher />
-              {user && (
-                <div className="flex items-center gap-2 mr-2">
-                  <span className="text-sm text-slate-500 hidden md:inline">
-                    {user.username}
-                  </span>
-                  <Badge variant="outline" className={roleColors[user.role] || roleColors.viewer}>
-                    {user.role.toUpperCase()}
-                  </Badge>
-                </div>
-              )}
-              <Button variant="outline" size="sm" onClick={onLogout}>
-                <LogOut className="mr-2 h-4 w-4" /> {t('app.logout')}
-              </Button>
+              {user && <UserNav user={user} onLogout={onLogout} />}
             </div>
           </div>
 

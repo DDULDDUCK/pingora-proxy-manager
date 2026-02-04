@@ -4,7 +4,9 @@
     "subtitle": "Sign in to manage your proxy",
     "mainTitle": "Pingora Proxy Manager",
     "mainSubtitle": "High performance Rust-based proxy engine",
-    "logout": "Logout"
+    "logout": "Logout",
+    "selectLanguage": "Select language",
+    "toggleTheme": "Toggle theme"
   },
   "login": {
     "username": "Username",
@@ -54,6 +56,7 @@
     "ssl": "SSL",
     "sslForced": "SSL Forced",
     "forceSsl": "Force SSL",
+    "httpsOnly": "HTTPS Only",
     "actions": "Actions",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -77,6 +80,8 @@
     "upstreamSniBadge": "Recommended for Cloudflare/Google",
     "upstreamSniBadgeEdit": "Fixes 502 Errors",
     "upstreamSniPlaceholder": "e.g. www.google.com",
+    "domainPlaceholder": "example.com",
+    "targetPlaceholder": "127.0.0.1:8080",
     "general": "General Settings",
     "upstream": "Upstream (Backend)",
     "accessControl": "Access Control",
@@ -116,7 +121,9 @@
     "responseHeader": "Response",
     "addHeader": "Add Header",
     "configuredHeaders": "Configured Headers",
-    "noHeaders": "No custom headers configured."
+    "noHeaders": "No custom headers configured.",
+    "destination": "Destination",
+    "status": "Status"
   },
   "streams": {
     "title": "Streams",
@@ -132,7 +139,9 @@
     "streamAdded": "Stream added successfully",
     "streamDeleted": "Stream deleted successfully",
     "actions": "Actions",
-    "delete": "Delete"
+    "delete": "Delete",
+    "destination": "Destination",
+    "noStreams": "No active streams"
   },
   "access": {
     "title": "Access Lists",
@@ -165,7 +174,11 @@
     "ipAddressRequired": "IP Address required",
     "ruleAdded": "IP rule added successfully",
     "ruleRemoved": "IP rule removed successfully",
-    "close": "Close"
+    "close": "Close",
+    "noListsFound": "No access lists found.",
+    "noUsers": "No users",
+    "noIpRules": "No IP rules",
+    "listPlaceholder": "Internal Admins"
   },
   "certificates": {
     "title": "SSL Certificates",
@@ -176,11 +189,14 @@
     "dnsProvidersDesc": "Manage API credentials for DNS challenges (required for Wildcard Certs).",
     "requestCertificate": "Request Certificate",
     "requestLetsEncrypt": "Request Let's Encrypt Certificate",
+    "issueCertificateTitle": "Issue SSL Certificate",
+    "validationMethod": "Validation Method",
     "domainNames": "Domain Names",
     "domainPlaceholder": "e.g. example.com or *.example.com",
     "wildcardNote": "For wildcards (*.example.com), you MUST select a DNS Provider.",
     "emailAddress": "Email Address",
     "emailPlaceholder": "admin@example.com",
+    "emailRequired": "Email is required",
     "dnsProviderOptional": "DNS Provider (Optional)",
     "useHttp01": "Use HTTP-01 Challenge",
     "useHttp01NoDns": "Use HTTP-01 Challenge (No DNS API)",
@@ -229,6 +245,12 @@
     "editUser": "Edit User",
     "username": "Username",
     "role": "Role",
+    "roleAdminDesc": "Full access",
+    "roleOperatorDesc": "Manage hosts & streams",
+    "roleViewerDesc": "Read only",
+    "addUserDesc": "Add a new user to the system",
+    "editUserDesc": "Update user \"{{username}}\"",
+    "created": "Created",
     "lastLogin": "Last Login",
     "actions": "Actions",
     "admin": "Admin",
@@ -250,7 +272,8 @@
     "createUserFailed": "Failed to create user",
     "updateUserFailed": "Failed to update user",
     "deleteUserFailed": "Failed to delete user",
-    "noChangesToSave": "No changes to save"
+    "noChangesToSave": "No changes to save",
+    "noUsersFound": "No users found"
   },
   "audit": {
     "title": "Audit Logs",
@@ -260,14 +283,17 @@
     "action": "Action",
     "details": "Details",
     "system": "System",
-    "resource": "Resource"
+    "resource": "Resource",
+    "resourceType": "Resource Type",
+    "allResources": "All resources"
   },
   "logs": {
     "title": "Server Logs",
     "description": "View recent proxy server logs.",
     "level": "Level",
     "timestamp": "Timestamp",
-    "message": "Message"
+    "message": "Message",
+    "noLogs": "No logs available or waiting for traffic..."
   },
   "settings": {
     "title": "Settings",
@@ -281,9 +307,11 @@
     "saveError": "Failed to save settings",
     "loadError": "Failed to load error page",
     "updateError": "Failed to update error page",
+    "updateSuccess": "Error page updated",
     "apply": "Apply Configuration",
     "applySuccess": "Configuration applied successfully",
-    "applyError": "Failed to apply configuration"
+    "applyError": "Failed to apply configuration",
+    "reset": "Reset"
   },
   "common": {
     "loading": "Loading...",
@@ -305,6 +333,9 @@
     "yes": "Yes",
     "no": "No",
     "apply": "Apply",
-    "clear": "Clear"
+    "clear": "Clear",
+    "reset": "Reset",
+    "permanent": "Permanent",
+    "temporary": "Temporary"
   }
 }

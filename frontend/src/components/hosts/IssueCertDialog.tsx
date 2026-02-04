@@ -21,6 +21,7 @@ import { useDnsProviders } from "@/hooks/useDnsProviders";
 import { useCertificates } from "@/hooks/useCertificates";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface IssueCertDialogProps {
   domain: string | null;
@@ -29,6 +30,7 @@ interface IssueCertDialogProps {
 }
 
 export function IssueCertDialog({ domain, open, onOpenChange }: IssueCertDialogProps) {
+  const { t } = useTranslation();
   const { dnsProviders } = useDnsProviders();
   const { requestCert } = useCertificates();
 
@@ -39,7 +41,7 @@ export function IssueCertDialog({ domain, open, onOpenChange }: IssueCertDialogP
   const handleRequest = async () => {
     if (!domain) return;
     if (!email) {
-      toast.error("Email is required");
+      toast.error(t('certificates.emailRequired'));
       return;
     }
 
@@ -50,10 +52,10 @@ export function IssueCertDialog({ domain, open, onOpenChange }: IssueCertDialogP
         email,
         provider_id: providerId === "http" ? undefined : Number(providerId),
       });
-      toast.success(`Certificate requested for ${domain}`);
+      toast.success(t('certificates.certRequested'));
       onOpenChange(false);
     } catch (e) {
-      toast.error("Failed to request certificate");
+      toast.error(t('certificates.certRequestFailed'));
       console.error(e);
     } finally {
       setIsSubmitting(false);
@@ -64,30 +66,30 @@ export function IssueCertDialog({ domain, open, onOpenChange }: IssueCertDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Issue SSL Certificate</DialogTitle>
+          <DialogTitle>{t('certificates.issueCertificateTitle')}</DialogTitle>
           <DialogDescription>
-            Request a Let's Encrypt certificate for <strong>{domain}</strong>.
+            {t('certificates.requestLetsEncrypt')} <strong>{domain}</strong>.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="email">Email Address</Label>
+            <Label htmlFor="email">{t('certificates.emailAddress')}</Label>
             <Input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
+              placeholder={t('certificates.emailPlaceholder')}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="provider">Validation Method</Label>
+            <Label htmlFor="provider">{t('certificates.validationMethod')}</Label>
             <Select value={providerId} onValueChange={setProviderId}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="http">HTTP-01 (Webroot)</SelectItem>
+                <SelectItem value="http">{t('certificates.useHttp01')}</SelectItem>
                 {dnsProviders.map((p) => (
                   <SelectItem key={p.id} value={p.id.toString()}>
                     DNS-01 ({p.name} - {p.provider_type})
@@ -96,7 +98,7 @@ export function IssueCertDialog({ domain, open, onOpenChange }: IssueCertDialogP
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Use DNS-01 for wildcard domains or if port 80 is blocked.
+              {t('certificates.dns01Note')}
             </p>
           </div>
         </div>
@@ -105,7 +107,7 @@ export function IssueCertDialog({ domain, open, onOpenChange }: IssueCertDialogP
             {isSubmitting && (
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Request Certificate
+            {t('certificates.requestCertificate')}
           </Button>
         </DialogFooter>
       </DialogContent>

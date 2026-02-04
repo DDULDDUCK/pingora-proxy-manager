@@ -111,7 +111,7 @@ export function StreamsTab() {
                <TableRow>
                  <TableHead>{t('streams.listenPort')}</TableHead>
                  <TableHead>{t('streams.protocol')}</TableHead>
-                 <TableHead>Destination</TableHead>
+                 <TableHead>{t('streams.destination')}</TableHead>
                  <TableHead className="text-right">{t('streams.actions')}</TableHead>
                </TableRow>
              </TableHeader>
@@ -132,7 +132,7 @@ export function StreamsTab() {
                ))}
                {(!streams || streams.length === 0) && (
                    <TableRow>
-                       <TableCell colSpan={4} className="text-center text-muted-foreground h-24">No active streams</TableCell>
+                       <TableCell colSpan={4} className="text-center text-muted-foreground h-24">{t('streams.noStreams')}</TableCell>
                    </TableRow>
                )}
              </TableBody>

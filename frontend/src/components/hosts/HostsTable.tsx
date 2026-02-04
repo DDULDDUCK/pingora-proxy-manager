@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowRightLeft, Link2, Lock, Settings, ShieldCheck, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Host } from "@/hooks/useHosts";
 import type { Cert } from "@/hooks/useCertificates";
 
@@ -15,16 +16,17 @@ interface HostsTableProps {
 }
 
 export function HostsTable({ hosts, certs, canManageHosts, onEdit, onIssueCert, onDelete }: HostsTableProps) {
+  const { t } = useTranslation();
   const now = Math.floor(Date.now() / 1000);
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Domain</TableHead>
-          <TableHead>Destination</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>{t('hosts.domain')}</TableHead>
+          <TableHead>{t('hosts.destination')}</TableHead>
+          <TableHead>{t('hosts.status')}</TableHead>
+          <TableHead className="text-right">{t('hosts.actions')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -56,7 +58,7 @@ export function HostsTable({ hosts, certs, canManageHosts, onEdit, onIssueCert, 
                     {cert && <span title={sslTitle}><ShieldCheck className={`h-3 w-3 ${sslColor}`} /></span>}
                   </div>
                   <div className="flex gap-1 mt-1">
-                    {host.ssl_forced && <Badge variant="outline" className="text-[10px] border-green-200 text-green-700 bg-green-50"><ShieldCheck className="h-3 w-3 mr-1" /> HTTPS Only</Badge>}
+                    {host.ssl_forced && <Badge variant="outline" className="text-[10px] border-green-200 text-green-700 bg-green-50"><ShieldCheck className="h-3 w-3 mr-1" /> {t('hosts.httpsOnly')}</Badge>}
                     {host.access_list_id && <Badge variant="outline" className="text-[10px] border-orange-200 text-orange-700 bg-orange-50"><Lock className="h-3 w-3 mr-1" /> ACL</Badge>}
                   </div>
                 </div>
@@ -93,7 +95,7 @@ export function HostsTable({ hosts, certs, canManageHosts, onEdit, onIssueCert, 
                 <div className="flex items-center justify-end gap-1">
                   {canManageHosts && (
                     <Button variant="ghost" size="sm" onClick={() => onEdit(host)}>
-                      <Settings className="h-4 w-4 text-slate-500" />
+                      <Settings className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   )}
                   {canManageHosts && (

@@ -4,7 +4,9 @@
     "subtitle": "프록시 관리를 위해 로그인하세요",
     "mainTitle": "Pingora Proxy Manager",
     "mainSubtitle": "고성능 Rust 기반 프록시 엔진",
-    "logout": "로그아웃"
+    "logout": "로그아웃",
+    "selectLanguage": "언어 선택",
+    "toggleTheme": "테마 변경"
   },
   "login": {
     "username": "사용자 이름",
@@ -54,6 +56,7 @@
     "ssl": "SSL",
     "sslForced": "SSL 강제",
     "forceSsl": "SSL 강제 적용",
+    "httpsOnly": "HTTPS 전용",
     "actions": "작업",
     "enabled": "활성화됨",
     "disabled": "비활성화됨",
@@ -77,6 +80,8 @@
     "upstreamSniBadge": "Cloudflare/Google 권장",
     "upstreamSniBadgeEdit": "502 오류 해결",
     "upstreamSniPlaceholder": "예: www.google.com",
+    "domainPlaceholder": "example.com",
+    "targetPlaceholder": "127.0.0.1:8080",
     "general": "일반 설정",
     "upstream": "업스트림 (백엔드)",
     "accessControl": "액세스 제어",
@@ -116,7 +121,9 @@
     "responseHeader": "응답(Response)",
     "addHeader": "헤더 추가",
     "configuredHeaders": "설정된 헤더 목록",
-    "noHeaders": "설정된 사용자 정의 헤더가 없습니다."
+    "noHeaders": "설정된 사용자 정의 헤더가 없습니다.",
+    "destination": "목적지",
+    "status": "상태"
   },
   "streams": {
     "title": "스트림",
@@ -132,7 +139,9 @@
     "streamAdded": "스트림이 성공적으로 추가되었습니다",
     "streamDeleted": "스트림이 성공적으로 삭제되었습니다",
     "actions": "작업",
-    "delete": "삭제"
+    "delete": "삭제",
+    "destination": "목적지",
+    "noStreams": "활성 스트림이 없습니다"
   },
   "access": {
     "title": "액세스 리스트",
@@ -165,7 +174,11 @@
     "ipAddressRequired": "IP 주소가 필요합니다",
     "ruleAdded": "IP 규칙이 성공적으로 추가되었습니다",
     "ruleRemoved": "IP 규칙이 성공적으로 제거되었습니다",
-    "close": "닫기"
+    "close": "닫기",
+    "noListsFound": "액세스 리스트를 찾을 수 없습니다.",
+    "noUsers": "사용자 없음",
+    "noIpRules": "IP 규칙 없음",
+    "listPlaceholder": "내부 관리자"
   },
   "certificates": {
     "title": "SSL 인증서",
@@ -176,11 +189,14 @@
     "dnsProvidersDesc": "DNS 챌린지를 위한 API 자격 증명을 관리합니다 (와일드카드 인증서에 필요).",
     "requestCertificate": "인증서 요청",
     "requestLetsEncrypt": "Let's Encrypt 인증서 요청",
+    "issueCertificateTitle": "SSL 인증서 발급",
+    "validationMethod": "검증 방법",
     "domainNames": "도메인 이름",
     "domainPlaceholder": "예: example.com 또는 *.example.com",
     "wildcardNote": "와일드카드(*.example.com)의 경우 DNS 제공업체를 반드시 선택해야 합니다.",
     "emailAddress": "이메일 주소",
     "emailPlaceholder": "admin@example.com",
+    "emailRequired": "이메일이 필요합니다",
     "dnsProviderOptional": "DNS 제공업체 (선택 사항)",
     "useHttp01": "HTTP-01 챌린지 사용",
     "useHttp01NoDns": "HTTP-01 챌린지 사용 (DNS API 없음)",
@@ -214,7 +230,7 @@
     "noDnsProvidersFound": "DNS 제공업체를 찾을 수 없습니다.",
     "domainEmailRequired": "도메인과 이메일이 필요합니다",
     "certRequested": "인증서가 요청되었습니다. 발급까지 몇 분 정도 걸릴 수 있습니다.",
-    "certRequestFailed": "인증서 요청에 실패했습니다",
+    "certRequestFailed": "인증서 요청 실패",
     "fillAllFields": "모든 필드를 채워주세요",
     "dnsProviderCreated": "DNS 제공업체가 생성되었습니다",
     "dnsProviderCreateFailed": "DNS 제공업체 생성에 실패했습니다",
@@ -229,6 +245,12 @@
     "editUser": "사용자 편집",
     "username": "사용자 이름",
     "role": "역할",
+    "roleAdminDesc": "전체 액세스 권한",
+    "roleOperatorDesc": "호스트 및 스트림 관리",
+    "roleViewerDesc": "읽기 전용",
+    "addUserDesc": "시스템에 새 사용자 추가",
+    "editUserDesc": "\"{username}\" 사용자 수정",
+    "created": "생성일",
     "lastLogin": "마지막 로그인",
     "actions": "작업",
     "admin": "관리자",
@@ -250,7 +272,8 @@
     "createUserFailed": "사용자 생성에 실패했습니다",
     "updateUserFailed": "사용자 업데이트에 실패했습니다",
     "deleteUserFailed": "사용자 삭제에 실패했습니다",
-    "noChangesToSave": "저장할 변경 사항이 없습니다"
+    "noChangesToSave": "저장할 변경 사항이 없습니다",
+    "noUsersFound": "사용자를 찾을 수 없습니다"
   },
   "audit": {
     "title": "감사 로그",
@@ -260,14 +283,17 @@
     "action": "작업",
     "details": "상세 내용",
     "system": "시스템",
-    "resource": "리소스"
+    "resource": "리소스",
+    "resourceType": "리소스 유형",
+    "allResources": "모든 리소스"
   },
   "logs": {
     "title": "서버 로그",
     "description": "최근 프록시 서버 로그를 확인합니다.",
     "level": "레벨",
     "timestamp": "타임스탬프",
-    "message": "메시지"
+    "message": "메시지",
+    "noLogs": "사용 가능한 로그가 없거나 트래픽 대기 중..."
   },
   "settings": {
     "title": "설정",
@@ -281,9 +307,11 @@
     "saveError": "설정 저장에 실패했습니다",
     "loadError": "에러 페이지를 로드하지 못했습니다",
     "updateError": "에러 페이지 업데이트에 실패했습니다",
+    "updateSuccess": "에러 페이지가 업데이트되었습니다",
     "apply": "설정 적용",
     "applySuccess": "설정이 성공적으로 적용되었습니다",
-    "applyError": "설정 적용에 실패했습니다"
+    "applyError": "설정 적용에 실패했습니다",
+    "reset": "초기화"
   },
   "common": {
     "loading": "로드 중...",
@@ -305,6 +333,9 @@
     "yes": "예",
     "no": "아니요",
     "apply": "적용",
-    "clear": "지우기"
+    "clear": "지우기",
+    "reset": "초기화",
+    "permanent": "영구적",
+    "temporary": "임시적"
   }
 }

@@ -5,7 +5,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 
 /**
@@ -29,7 +28,7 @@ const SUPPORTED_LANGUAGES: readonly Language[] = [
  * Allows users to change the application language
  */
 export function LanguageSwitcher() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   const handleLanguageChange = (langCode: string) => {
     i18n.changeLanguage(langCode);
@@ -42,11 +41,12 @@ export function LanguageSwitcher() {
 
   return (
     <Select value={i18n.language} onValueChange={handleLanguageChange}>
-      <SelectTrigger className="w-[140px]" aria-label="Select language">
-        <Globe className="mr-2 h-4 w-4" aria-hidden="true" />
-        <SelectValue>{currentLanguage.nativeName}</SelectValue>
+      <SelectTrigger className="w-auto px-2 gap-2 border-0 bg-transparent focus:ring-0 focus:ring-offset-0 hover:bg-accent/50 transition-colors" aria-label={t('app.selectLanguage')}>
+        <Globe className="h-4 w-4" aria-hidden="true" />
+        <span className="hidden sm:inline-block text-sm font-medium uppercase">{currentLanguage.code}</span>
       </SelectTrigger>
-      <SelectContent>
+
+      <SelectContent align="end">
         {SUPPORTED_LANGUAGES.map((lang) => (
           <SelectItem key={lang.code} value={lang.code}>
             <span className="flex items-center gap-2">

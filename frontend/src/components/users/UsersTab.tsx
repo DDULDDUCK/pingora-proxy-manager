@@ -45,14 +45,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const roleConfig = {
-  admin: { label: "Admin", color: "destructive" as const, icon: Shield },
-  operator: { label: "Operator", color: "default" as const, icon: Edit2 },
-  viewer: { label: "Viewer", color: "secondary" as const, icon: Eye },
-};
-
 export function UsersTab() {
   const { t } = useTranslation();
+  
+  const roleConfig = {
+    admin: { label: t('users.admin'), color: "destructive" as const, icon: Shield },
+    operator: { label: t('users.operator'), color: "default" as const, icon: Edit2 },
+    viewer: { label: t('users.viewer'), color: "secondary" as const, icon: Eye },
+  };
+
   const { data: users, isLoading } = useUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
@@ -173,7 +174,7 @@ export function UsersTab() {
             <DialogHeader>
               <DialogTitle>{t('users.addUser')}</DialogTitle>
               <DialogDescription>
-                Add a new user to the system
+                {t('users.addUserDesc')}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -183,7 +184,7 @@ export function UsersTab() {
                   id="username"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder={t('users.username')}
                 />
               </div>
               <div className="space-y-2">
@@ -193,21 +194,21 @@ export function UsersTab() {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter password"
+                  placeholder={t('users.password')}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">{t('users.role')}</Label>
                 <Select value={newRole} onValueChange={setNewRole}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
+                    <SelectValue placeholder={t('users.role')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">{t('users.admin')} - Full access</SelectItem>
+                    <SelectItem value="admin">{t('users.admin')} - {t('users.roleAdminDesc')}</SelectItem>
                     <SelectItem value="operator">
-                      {t('users.operator')} - Manage hosts & streams
+                      {t('users.operator')} - {t('users.roleOperatorDesc')}
                     </SelectItem>
-                    <SelectItem value="viewer">{t('users.viewer')} - Read only</SelectItem>
+                    <SelectItem value="viewer">{t('users.viewer')} - {t('users.roleViewerDesc')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -233,7 +234,7 @@ export function UsersTab() {
             <TableRow>
               <TableHead>{t('users.username')}</TableHead>
               <TableHead>{t('users.role')}</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead>{t('users.created')}</TableHead>
               <TableHead>{t('users.lastLogin')}</TableHead>
               <TableHead className="text-right">{t('users.actions')}</TableHead>
             </TableRow>
@@ -281,7 +282,7 @@ export function UsersTab() {
             {(!users || users.length === 0) && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  No users found
+                  {t('users.noUsersFound')}
                 </TableCell>
               </TableRow>
             )}
@@ -295,7 +296,7 @@ export function UsersTab() {
           <DialogHeader>
             <DialogTitle>{t('users.editUser')}</DialogTitle>
             <DialogDescription>
-              Update user "{editingUser?.username}"
+              {t('users.editUserDesc', { username: editingUser?.username })}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -303,14 +304,14 @@ export function UsersTab() {
               <Label htmlFor="edit-role">{t('users.role')}</Label>
               <Select value={editRole} onValueChange={setEditRole}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
+                  <SelectValue placeholder={t('users.role')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">{t('users.admin')} - Full access</SelectItem>
+                  <SelectItem value="admin">{t('users.admin')} - {t('users.roleAdminDesc')}</SelectItem>
                   <SelectItem value="operator">
-                    {t('users.operator')} - Manage hosts & streams
+                    {t('users.operator')} - {t('users.roleOperatorDesc')}
                   </SelectItem>
-                  <SelectItem value="viewer">{t('users.viewer')} - Read only</SelectItem>
+                  <SelectItem value="viewer">{t('users.viewer')} - {t('users.roleViewerDesc')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -4,7 +4,9 @@
     "subtitle": "Accedi per gestire il tuo proxy",
     "mainTitle": "Pingora Proxy Manager",
     "mainSubtitle": "Motore proxy ad alte prestazioni basato su Rust",
-    "logout": "Esci"
+    "logout": "Esci",
+    "selectLanguage": "Seleziona lingua",
+    "toggleTheme": "Cambia tema"
   },
   "login": {
     "username": "Nome utente",
@@ -54,6 +56,7 @@
     "ssl": "SSL",
     "sslForced": "SSL forzato",
     "forceSsl": "Forza SSL",
+    "httpsOnly": "Solo HTTPS",
     "actions": "Azioni",
     "enabled": "Abilitato",
     "disabled": "Disabilitato",
@@ -77,6 +80,8 @@
     "upstreamSniBadge": "Consigliato per Cloudflare/Google",
     "upstreamSniBadgeEdit": "Risolve errori 502",
     "upstreamSniPlaceholder": "es. www.google.com",
+    "domainPlaceholder": "example.com",
+    "targetPlaceholder": "127.0.0.1:8080",
     "general": "Impostazioni Generali",
     "upstream": "Upstream (Backend)",
     "accessControl": "Controllo Accessi",
@@ -116,7 +121,9 @@
     "responseHeader": "Risposta",
     "addHeader": "Aggiungi Intestazione",
     "configuredHeaders": "Intestazioni Configurate",
-    "noHeaders": "Nessuna intestazione personalizzata configurata."
+    "noHeaders": "Nessuna intestazione personalizzata configurata.",
+    "destination": "Destinazione",
+    "status": "Stato"
   },
   "streams": {
     "title": "Stream",
@@ -132,7 +139,9 @@
     "streamAdded": "Stream aggiunto con successo",
     "streamDeleted": "Stream eliminato con successo",
     "actions": "Azioni",
-    "delete": "Elimina"
+    "delete": "Elimina",
+    "destination": "Destinazione",
+    "noStreams": "Nessuno stream attivo"
   },
   "access": {
     "title": "Liste di accesso",
@@ -165,7 +174,11 @@
     "ipAddressRequired": "L'indirizzo IP è obbligatorio",
     "ruleAdded": "Regola IP aggiunta con successo",
     "ruleRemoved": "Regola IP rimossa con successo",
-    "close": "Chiudi"
+    "close": "Chiudi",
+    "noListsFound": "Nessuna lista di accesso trovata.",
+    "noUsers": "Nessun utente",
+    "noIpRules": "Nessuna regola IP",
+    "listPlaceholder": "Amministratori Interni"
   },
   "certificates": {
     "title": "Certificati SSL",
@@ -176,11 +189,14 @@
     "dnsProvidersDesc": "Gestisci le credenziali API per le sfide DNS (necessarie per i certificati Wildcard).",
     "requestCertificate": "Richiedi Certificato",
     "requestLetsEncrypt": "Richiedi Certificato Let's Encrypt",
+    "issueCertificateTitle": "Emetti Certificato SSL",
+    "validationMethod": "Metodo di Validazione",
     "domainNames": "Nomi Dominio",
     "domainPlaceholder": "es. example.com o *.example.com",
     "wildcardNote": "Per i wildcard (*.example.com), DEVI selezionare un Provider DNS.",
     "emailAddress": "Indirizzo Email",
     "emailPlaceholder": "admin@example.com",
+    "emailRequired": "L'email è obbligatoria",
     "dnsProviderOptional": "Provider DNS (Opzionale)",
     "useHttp01": "Usa Sfida HTTP-01",
     "useHttp01NoDns": "Usa Sfida HTTP-01 (Senza API DNS)",
@@ -229,6 +245,12 @@
     "editUser": "Modifica utente",
     "username": "Nome utente",
     "role": "Ruolo",
+    "roleAdminDesc": "Accesso completo",
+    "roleOperatorDesc": "Gestisci host e stream",
+    "roleViewerDesc": "Sola lettura",
+    "addUserDesc": "Aggiungi un nuovo utente al sistema",
+    "editUserDesc": "Modifica utente \"{{username}}\"",
+    "created": "Creato",
     "lastLogin": "Ultimo accesso",
     "actions": "Azioni",
     "admin": "Amministratore",
@@ -250,7 +272,8 @@
     "createUserFailed": "Impossibile creare l'utente",
     "updateUserFailed": "Impossibile aggiornare l'utente",
     "deleteUserFailed": "Impossibile eliminare l'utente",
-    "noChangesToSave": "Nessuna modifica da salvare"
+    "noChangesToSave": "Nessuna modifica da salvare",
+    "noUsersFound": "Nessun utente trovato"
   },
   "audit": {
     "title": "Log di controllo",
@@ -260,14 +283,17 @@
     "action": "Azione",
     "details": "Dettagli",
     "system": "Sistema",
-    "resource": "Risorsa"
+    "resource": "Risorsa",
+    "resourceType": "Tipo Risorsa",
+    "allResources": "Tutte le risorse"
   },
   "logs": {
     "title": "Log del server",
     "description": "Visualizza i log recenti del server proxy.",
     "level": "Livello",
     "timestamp": "Data/ora",
-    "message": "Messaggio"
+    "message": "Messaggio",
+    "noLogs": "Nessun log disponibile o in attesa di traffico..."
   },
   "settings": {
     "title": "Impostazioni",
@@ -281,9 +307,11 @@
     "saveError": "Impossibile salvare le impostazioni",
     "loadError": "Impossibile caricare la pagina di errore",
     "updateError": "Impossibile aggiornare la pagina di errore",
+    "updateSuccess": "Pagina di errore aggiornata",
     "apply": "Applica configurazione",
     "applySuccess": "Configurazione applicata con successo",
-    "applyError": "Impossibile applicare la configurazione"
+    "applyError": "Impossibile applicare la configurazione",
+    "reset": "Reimposta"
   },
   "common": {
     "loading": "Caricamento...",
@@ -305,6 +333,9 @@
     "yes": "Sì",
     "no": "No",
     "apply": "Applica",
-    "clear": "Cancella"
+    "clear": "Cancella",
+    "reset": "Reimposta",
+    "permanent": "Permanente",
+    "temporary": "Temporaneo"
   }
 }

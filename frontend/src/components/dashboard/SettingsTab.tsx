@@ -35,7 +35,7 @@ export function SettingsTab() {
         method: "POST",
         body: JSON.stringify({ html }),
       });
-      toast.success("Error page updated");
+      toast.success(t('settings.updateSuccess'));
     } catch {
       toast.error(t('settings.updateError'));
     } finally {
@@ -63,7 +63,7 @@ export function SettingsTab() {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={fetchErrorPage} disabled={loading}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Reset
+                {t('settings.reset')}
               </Button>
               <Button onClick={handleSave} disabled={loading}>
                 <Save className="mr-2 h-4 w-4" />

@@ -58,7 +58,7 @@ export function DashboardTab() {
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{realtime?.status_2xx.toLocaleString() ?? "-"}</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{realtime?.status_2xx.toLocaleString() ?? "-"}</div>
             <p className="text-xs text-muted-foreground">
               {t('dashboard.successfulResponses')}
             </p>
@@ -70,7 +70,7 @@ export function DashboardTab() {
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
               {((realtime?.status_4xx ?? 0) + (realtime?.status_5xx ?? 0)).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
