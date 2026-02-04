@@ -4,7 +4,7 @@ version = "1.1.0"
 edition = "2021"
 
 [dependencies]
-pingora = { version = "0.6.0", features = ["lb", "openssl"] }
+pingora = { version = "0.7.0", features = ["lb", "openssl"] }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8.7", features = ["multipart"] }
 log = "0.4"
@@ -36,6 +36,6 @@ rand = "0.9.2"
 [dev-dependencies]
 tokio-test = "0.4"
 sqlx-cli = { version = "0.8", features = ["sqlite"] }
-axum-test = "16.0.0" 
+axum-test = "18.7.0" 
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3.10"

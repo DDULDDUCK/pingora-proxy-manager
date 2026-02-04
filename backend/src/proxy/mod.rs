@@ -158,7 +158,7 @@ impl ProxyHttp for DynamicProxy {
     }
 
     /// 업스트림 응답 필터링 (Response Headers 수행)
-    fn upstream_response_filter(
+    async fn upstream_response_filter(
         &self,
         _session: &mut Session,
         upstream_response: &mut ResponseHeader,
