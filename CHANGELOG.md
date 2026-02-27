@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.2.1...v1.3.0) (2026-02-27)
+
+
+### Features
+
+* **proxy:** harden trusted header handling and failover ([be6db62](https://github.com/DDULDDUCK/pingora-proxy-manager/commit/be6db62d8ced6ec8182e789686a40f24d834edc9))
+
 ## [1.2.1](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.2.0...v1.2.1) (2026-02-27)
 
 
