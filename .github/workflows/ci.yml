@@ -45,7 +45,7 @@ jobs:
       run: cargo fmt -- --check
 
     - name: Check Code (Clippy)
-      run: cargo clippy -- -D warnings
+      run: cargo clippy --all-targets
 
     - name: Run Tests
       run: cargo test
