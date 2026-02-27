@@ -1,3 +1,4 @@
+pub mod connection_filter;
 pub mod filters;
 
 use self::filters::{FilterResult, ProxyFilter};
@@ -9,17 +10,29 @@ use pingora::http::ResponseHeader;
 use pingora::prelude::*;
 use rand::prelude::IndexedRandom;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration; // Fix for rand 0.9
 
 pub struct DynamicProxy {
     pub state: Arc<AppState>,
 }
 
+fn upstream_body_throttle() -> Option<Duration> {
+    static THROTTLE: OnceLock<Option<Duration>> = OnceLock::new();
+    *THROTTLE.get_or_init(|| {
+        std::env::var("PPM_UPSTREAM_BODY_THROTTLE_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_millis)
+    })
+}
+
 pub struct ProxyCtx {
     pub host: String,
     pub host_config: Option<HostConfig>,
     pub matched_location: Option<LocationConfig>,
+    pub retry_count: usize,
+    pub attempted_targets: Vec<String>,
 }
 
 #[async_trait]
@@ -31,7 +44,39 @@ impl ProxyHttp for DynamicProxy {
             host: String::new(),
             host_config: None,
             matched_location: None,
+            retry_count: 0,
+            attempted_targets: Vec::new(),
         }
+    }
+
+    fn fail_to_connect(
+        &self,
+        _session: &mut Session,
+        _peer: &HttpPeer,
+        ctx: &mut Self::CTX,
+        mut e: Box<Error>,
+    ) -> Box<Error> {
+        let target_count = if let Some(loc) = &ctx.matched_location {
+            loc.targets.len()
+        } else if let Some(host) = &ctx.host_config {
+            host.targets.len()
+        } else {
+            0
+        };
+
+        const MAX_RETRIES: usize = 2;
+        if target_count > 1 && ctx.retry_count < MAX_RETRIES {
+            ctx.retry_count += 1;
+            e.set_retry(true);
+            tracing::warn!(
+                "Upstream connect failed for host {}. Retrying with another target (attempt {}/{})",
+                ctx.host,
+                ctx.retry_count,
+                MAX_RETRIES
+            );
+        }
+
+        e
     }
 
     /// 요청 필터링: ACME Challenge 처리 및 라우팅 정보 조회
@@ -70,11 +115,11 @@ impl ProxyHttp for DynamicProxy {
             ctx.host_config = Some(host_config.clone());
 
             let host_filters: Vec<Box<dyn ProxyFilter>> = vec![
+                Box::new(filters::ssl::SslFilter),
+                Box::new(filters::redirect::RedirectFilter),
                 Box::new(filters::acl::AclFilter {
                     state: self.state.clone(),
                 }),
-                Box::new(filters::redirect::RedirectFilter),
-                Box::new(filters::ssl::SslFilter),
             ];
 
             for filter in host_filters {
@@ -111,16 +156,21 @@ impl ProxyHttp for DynamicProxy {
             if loc.rewrite {
                 let original_path = session.req_header().uri.path().to_string();
                 if original_path.starts_with(&loc.path) {
-                    let new_path = if original_path.len() == loc.path.len() {
-                        "/"
+                    let rewritten_path = if original_path.len() == loc.path.len() {
+                        "/".to_string()
                     } else {
-                        &original_path[loc.path.len()..]
+                        let suffix = &original_path[loc.path.len()..];
+                        if suffix.starts_with('/') {
+                            suffix.to_string()
+                        } else {
+                            format!("/{}", suffix)
+                        }
                     };
 
                     let new_uri = if let Some(query) = session.req_header().uri.query() {
-                        format!("{}?{}", new_path, query)
+                        format!("{}?{}", rewritten_path, query)
                     } else {
-                        new_path.to_string()
+                        rewritten_path.clone()
                     };
 
                     upstream_request.set_uri(new_uri.parse().map_err(|e| {
@@ -129,7 +179,7 @@ impl ProxyHttp for DynamicProxy {
                             format!("Failed to parse URI: {}", e),
                         )
                     })?);
-                    tracing::info!("🔄 Rewrote path: {} -> {}", original_path, new_path);
+                    tracing::info!("🔄 Rewrote path: {} -> {}", original_path, rewritten_path);
                 }
             }
         }
@@ -185,6 +235,16 @@ impl ProxyHttp for DynamicProxy {
         Ok(())
     }
 
+    fn upstream_response_body_filter(
+        &self,
+        _session: &mut Session,
+        _body: &mut Option<bytes::Bytes>,
+        _end_of_stream: bool,
+        _ctx: &mut Self::CTX,
+    ) -> Result<Option<Duration>> {
+        Ok(upstream_body_throttle())
+    }
+
     /// 실제 라우팅 로직 (CTX 활용)
     async fn upstream_peer(
         &self,
@@ -222,10 +282,25 @@ impl ProxyHttp for DynamicProxy {
                     "No upstream targets found",
                 ));
             } else {
-                // Pick random
+                let candidates: Vec<&String> = targets
+                    .iter()
+                    .filter(|t| !ctx.attempted_targets.iter().any(|picked| picked == *t))
+                    .collect();
+
                 let mut rng = rand::rng(); // Fixed for rand 0.9
-                targets.choose(&mut rng).unwrap() // Safe because we checked is_empty
+                if let Some(next) = candidates.choose(&mut rng) {
+                    (*next).clone()
+                } else {
+                    targets.choose(&mut rng).cloned().ok_or_else(|| {
+                        Error::explain(
+                            ErrorType::HTTPStatus(constants::http::INTERNAL_ERROR),
+                            "No selectable upstream targets found",
+                        )
+                    })?
+                }
             };
+
+            ctx.attempted_targets.push(target.clone());
 
             let use_tls = scheme == "https";
             let sni = upstream_sni.cloned().unwrap_or_else(|| ctx.host.clone());
@@ -246,6 +321,10 @@ impl ProxyHttp for DynamicProxy {
                 peer.sni = sni;
                 peer.options.verify_cert = verify_ssl;
                 peer.options.verify_hostname = verify_ssl;
+                peer.options.upstream_tls_handshake_complete_hook = Some(Arc::new(|_| {
+                    Some(Arc::new("upstream_tls".to_string())
+                        as Arc<dyn std::any::Any + Send + Sync>)
+                }));
             }
 
             peer.options.connection_timeout =
@@ -278,6 +357,7 @@ impl ProxyHttp for DynamicProxy {
         if let Some(resp) = session.response_written() {
             let status = resp.status.as_u16();
             let body_len = session.body_bytes_sent() as u64;
+            let upstream_body_len = session.upstream_body_bytes_received() as u64;
 
             self.state
                 .metrics
@@ -307,6 +387,7 @@ impl ProxyHttp for DynamicProxy {
                 path = %session.req_header().uri.path(),
                 status = status,
                 bytes = body_len,
+                upstream_bytes = upstream_body_len,
                 host = %ctx.host,
                 "Request handled"
             );

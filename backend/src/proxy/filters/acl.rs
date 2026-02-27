@@ -1,3 +1,4 @@
+use super::trusted_proxy;
 use super::{FilterResult, ProxyCtx, ProxyFilter};
 use crate::auth;
 use crate::constants;
@@ -24,15 +25,9 @@ impl ProxyFilter for AclFilter {
                 if let Some(acl) = self.state.get_access_list(acl_id) {
                     // (A) IP 기반 필터링
                     if !acl.ips.is_empty() {
-                        // Use correct IP extraction that handles IPv6
-                        let client_ip = if let Some(addr) = session.client_addr() {
-                            match addr.as_inet() {
-                                Some(inet_addr) => inet_addr.ip().to_string(),
-                                None => addr.to_string(), // Fallback for UDS or others
-                            }
-                        } else {
-                            String::new()
-                        };
+                        let client_ip = trusted_proxy::effective_client_ip(session)
+                            .map(|ip| ip.to_string())
+                            .unwrap_or_default();
 
                         let mut ip_allowed = true;
                         let mut has_allow_rules = false;
