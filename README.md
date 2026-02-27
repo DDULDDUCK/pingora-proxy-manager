@@ -69,6 +69,16 @@ services:
 
 > **Note**: We recommend `network_mode: host` for best performance and simplified port management. If you prefer bridge mode, ensure you map ports `80:8080`, `443:443`, and `81:81`.
 
+### Optional: If you run PPM behind another reverse proxy
+
+If your traffic path is `Client -> Cloudflare/Nginx/ALB -> PPM`, set `PPM_TRUSTED_PROXY_IPS` (or `TRUSTED_PROXY_IPS`) to the IP(s) of the immediate proxy hop. Otherwise, PPM only trusts loopback for forwarded headers and may not use `X-Forwarded-For` / `X-Forwarded-Proto`.
+
+Example:
+
+```bash
+PPM_TRUSTED_PROXY_IPS=127.0.0.1,10.0.0.10
+```
+
 ### 2. Start the Service
 
 ```bash
