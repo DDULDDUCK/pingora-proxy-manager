@@ -98,7 +98,8 @@ impl AcmeManager {
                         .arg(&temp_path);
                 }
                 "hetzner" => {
-                    cmd.arg("--dns-hetzner")
+                    cmd.arg("--authenticator")
+                        .arg("dns-hetzner")
                         .arg("--dns-hetzner-credentials")
                         .arg(&temp_path)
                         .arg("--dns-hetzner-propagation-seconds")
