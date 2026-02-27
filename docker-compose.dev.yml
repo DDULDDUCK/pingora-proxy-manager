@@ -15,3 +15,4 @@ services:
     environment:
       - JWT_SECRET=dev_secret_key
       - RUST_LOG=debug
+      - PPM_TRUSTED_PROXY_IPS=${PPM_TRUSTED_PROXY_IPS:-127.0.0.1}

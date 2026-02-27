@@ -19,3 +19,4 @@ services:
     environment:
       - JWT_SECRET=changeme_in_production_please
       - RUST_LOG=info
+      - PPM_TRUSTED_PROXY_IPS=${PPM_TRUSTED_PROXY_IPS:-127.0.0.1}
