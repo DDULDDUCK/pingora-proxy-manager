@@ -196,21 +196,22 @@ impl ProxyHttp for DynamicProxy {
             // Check matched_location first, then host_config.
             // Both now support multiple targets (Vec<String>).
 
-            let (targets, scheme, verify_ssl, upstream_sni) = if let Some(loc) = &ctx.matched_location {
-                (
-                    &loc.targets,
-                    &loc.scheme,
-                    loc.verify_ssl,
-                    loc.upstream_sni.as_ref(),
-                )
-            } else {
-                (
-                    &host_config.targets,
-                    &host_config.scheme,
-                    host_config.verify_ssl,
-                    host_config.upstream_sni.as_ref(),
-                )
-            };
+            let (targets, scheme, verify_ssl, upstream_sni) =
+                if let Some(loc) = &ctx.matched_location {
+                    (
+                        &loc.targets,
+                        &loc.scheme,
+                        loc.verify_ssl,
+                        loc.upstream_sni.as_ref(),
+                    )
+                } else {
+                    (
+                        &host_config.targets,
+                        &host_config.scheme,
+                        host_config.verify_ssl,
+                        host_config.upstream_sni.as_ref(),
+                    )
+                };
 
             // Select a target using simple Random Load Balancing
             // If targets is empty (shouldn't happen with valid config), error out.
