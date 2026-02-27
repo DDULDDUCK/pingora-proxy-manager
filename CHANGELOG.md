@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.2.0...v1.2.1) (2026-02-27)
+
+
+### Bug Fixes
+
+* **acme:** use explicit dns-hetzner authenticator ([bcfc11a](https://github.com/DDULDDUCK/pingora-proxy-manager/commit/bcfc11a581b301c474c178b317ea5f61fdfd5daa))
+
 ## [1.2.0](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.1.0...v1.2.0) (2026-02-04)
 
 
