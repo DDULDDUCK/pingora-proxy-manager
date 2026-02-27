@@ -6,6 +6,7 @@ pub mod acl;
 pub mod acme;
 pub mod redirect;
 pub mod ssl;
+pub mod trusted_proxy;
 
 #[derive(Debug)]
 pub enum FilterResult {

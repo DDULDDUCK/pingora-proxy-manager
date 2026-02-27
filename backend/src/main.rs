@@ -11,6 +11,7 @@ mod state;
 mod stream_manager;
 mod tls_manager;
 
+use crate::proxy::connection_filter::IpBlockConnectionFilter;
 use crate::proxy::DynamicProxy;
 use crate::state::AppState;
 use crate::stream_manager::StreamManager;
@@ -86,31 +87,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 recorder_handle_for_api,
                 stream_manager_for_api,
             );
-            let listener = tokio::net::TcpListener::bind(constants::network::API_PORT_STR)
-                .await
-                .unwrap();
+            let listener =
+                match tokio::net::TcpListener::bind(constants::network::API_PORT_STR).await {
+                    Ok(listener) => listener,
+                    Err(e) => {
+                        tracing::error!("❌ Failed to bind API listener: {}", e);
+                        return;
+                    }
+                };
             tracing::info!("🎮 Control Plane (API) running on port 81");
-            axum::serve(listener, app).await.unwrap();
+            if let Err(e) = axum::serve(listener, app).await {
+                tracing::error!("❌ API server stopped with error: {}", e);
+            }
         });
 
         // 5. 자동 갱신 스케줄러 (매 1시간마다 체크)
         let pool_for_acme = pool.clone();
         let state_for_acme = state_for_init.clone();
         tokio::spawn(async move {
-            let acme_manager = acme::AcmeManager::new(
-                state_for_acme,
-                pool_for_acme.clone(),
-                "admin@example.com".to_string(),
-            );
+            let acme_contact_email = std::env::var("ACME_CONTACT_EMAIL")
+                .or_else(|_| std::env::var("ACME_EMAIL"))
+                .unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "⚠️ ACME contact email is not configured. Falling back to admin@example.com"
+                    );
+                    "admin@example.com".to_string()
+                });
+
+            let acme_manager =
+                acme::AcmeManager::new(state_for_acme, pool_for_acme.clone(), acme_contact_email);
 
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
 
                 tracing::info!("⏰ Checking for expiring certificates...");
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64;
+                let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                    Ok(duration) => duration.as_secs() as i64,
+                    Err(e) => {
+                        tracing::error!(
+                            "❌ Failed to compute current timestamp for renewal: {}",
+                            e
+                        );
+                        continue;
+                    }
+                };
                 let renewal_threshold = now + 30 * 24 * 60 * 60;
 
                 match db::get_expiring_certs(&pool_for_acme, renewal_threshold).await {
@@ -149,10 +169,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // 데이터가 있을 때만 저장 (옵션)
                 if reqs > 0 {
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs() as i64;
+                    let now =
+                        match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                            Ok(duration) => duration.as_secs() as i64,
+                            Err(e) => {
+                                tracing::error!(
+                                    "❌ Failed to compute current timestamp for metrics: {}",
+                                    e
+                                );
+                                continue;
+                            }
+                        };
                     if let Err(e) =
                         db::insert_traffic_stat(&pool_for_stats, now, reqs, bytes, s2xx, s4xx, s5xx)
                             .await
@@ -177,6 +204,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             state: state.clone(), // API가 업데이트하는 그 state를 공유
         },
     );
+
+    my_proxy.set_connection_filter(Arc::new(IpBlockConnectionFilter::from_env()));
 
     my_proxy.add_tcp(constants::network::PROXY_PORT_STR);
 
@@ -204,13 +233,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(cert_manager) = cert_manager {
         // SNI 기반 동적 인증서 선택 사용
-        let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_manager))
-            .expect("Failed to create TLS settings with callbacks");
-
-        tls_settings.enable_h2();
-
-        my_proxy.add_tls_with_settings(constants::network::TLS_PORT_STR, None, tls_settings);
-        tracing::info!("🔐 TLS with SNI-based dynamic certificate selection enabled");
+        match TlsSettings::with_callbacks(Box::new(cert_manager)) {
+            Ok(mut tls_settings) => {
+                tls_settings.enable_h2();
+                my_proxy.add_tls_with_settings(
+                    constants::network::TLS_PORT_STR,
+                    None,
+                    tls_settings,
+                );
+                tracing::info!("🔐 TLS with SNI-based dynamic certificate selection enabled");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "⚠️ Failed to create TLS callback settings: {}. Falling back to static TLS cert.",
+                    e
+                );
+                my_proxy.add_tls(
+                    constants::network::TLS_PORT_STR,
+                    "data/certs/default.crt",
+                    "data/certs/default.key",
+                )?;
+            }
+        }
     } else {
         // 폴백: 디폴트 인증서만 사용
         my_proxy.add_tls(
@@ -224,5 +268,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     my_server.add_service(my_proxy);
     tracing::info!("🚀 Data Plane (Proxy) running on port 8080 (HTTP) and 443 (HTTPS)");
     my_server.run_forever();
-    Ok(())
 }

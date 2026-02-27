@@ -38,6 +38,16 @@ Without this volume, all your settings and certificates will be lost when the co
 1. **JWT Secret**: Always change the `JWT_SECRET` environment variable to a unique, random string.
 2. **Dashboard Port**: By default, the dashboard is on port 81. Consider restricting access to this port via a firewall or a VPN.
 3. **Running as Non-Root**: The Docker image is designed to run with necessary capabilities to bind to ports 80/443 without being full root where possible, but `network_mode: host` usually requires higher privileges.
+4. **Trusted Proxy Headers**: If PPM is behind another reverse proxy/load balancer, set `PPM_TRUSTED_PROXY_IPS` (or `TRUSTED_PROXY_IPS`) to the IP addresses of the immediate upstream proxy hop. By default, only loopback (`127.0.0.1`, `::1`) is trusted for forwarded headers.
+
+### Trusted Proxy Example
+
+```yaml
+environment:
+  - PPM_TRUSTED_PROXY_IPS=127.0.0.1,10.0.0.10
+```
+
+Without this setting in proxied deployments, `X-Forwarded-For` and `X-Forwarded-Proto` may be ignored, which can change ACL and SSL-force behavior.
 
 ## Performance Tuning
 Pingora is highly efficient, but you can optimize it further:

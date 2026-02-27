@@ -4,7 +4,7 @@ version = "1.2.1"
 edition = "2021"
 
 [dependencies]
-pingora = { version = "0.7.0", features = ["lb", "openssl"] }
+pingora = { version = "0.7.0", features = ["lb", "openssl", "connection_filter"] }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8.7", features = ["multipart"] }
 log = "0.4"
