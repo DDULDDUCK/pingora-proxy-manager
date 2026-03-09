@@ -30,6 +30,7 @@ services:
       - "81:81"     # Dashboard/API
     volumes:
       - ./data:/app/data
+      - ./letsencrypt:/etc/letsencrypt
       - ./logs:/app/logs
     environment:
       - JWT_SECRET=your_super_secret_key
@@ -40,6 +41,8 @@ Run the container:
 ```bash
 docker compose up -d
 ```
+
+If you plan to use Let's Encrypt, keep both volumes mounted. `/app/data` stores app state and copied certificates, while `/etc/letsencrypt` stores Certbot account data, renewal metadata, and the live certificate tree used during issuance and renewal.
 
 ## First Login
 1. Open your browser and navigate to `http://your-server-ip:81`.

@@ -61,6 +61,7 @@ services:
     network_mode: host # Recommended for performance & L4 streams
     volumes:
       - ./data:/app/data        # Database & Certs
+      - ./letsencrypt:/etc/letsencrypt # Certbot account, renewal, and live cert state
       - ./logs:/app/logs        # Access Logs
     environment:
       - JWT_SECRET=changeme_in_production_please
@@ -68,6 +69,8 @@ services:
 ```
 
 > **Note**: We recommend `network_mode: host` for best performance and simplified port management. If you prefer bridge mode, ensure you map ports `80:8080`, `443:443`, and `81:81`.
+>
+> For Let's Encrypt, keep both `./data:/app/data` and `./letsencrypt:/etc/letsencrypt` mounted. HTTP-01 validation reaches PPM over host port 80, which the container forwards to the app's internal port 8080.
 
 ### Optional: If you run PPM behind another reverse proxy
 
