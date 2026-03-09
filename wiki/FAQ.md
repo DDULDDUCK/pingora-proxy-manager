@@ -14,8 +14,10 @@ Yes! Pingora Proxy Manager is a modern alternative written in Rust. It's designe
 
 ### Why is my SSL certificate not generating?
 1. **HTTP-01**: Ensure your domain points to your server's public IP and port 80 is open.
-2. **DNS-01**: Check your DNS Provider credentials. Ensure the API token has permissions to edit TXT records.
-3. **Logs**: Check the logs in the dashboard or run `docker logs pingora-proxy` to see detailed error messages from Certbot.
+2. **HTTP-01**: Make sure port 80 reaches PPM's HTTP listener. In bridge mode that means mapping `80:8080`; in host mode it means nothing else can be bound to port 80.
+3. **HTTP-01**: Persist `/etc/letsencrypt` as well as `/app/data`, or Certbot renewal state can be lost after a container restart.
+4. **DNS-01**: Check your DNS Provider credentials. Ensure the API token has permissions to edit TXT records.
+5. **Logs**: Check the logs in the dashboard or run `docker logs pingora-proxy` to see detailed error messages from Certbot.
 
 ### I forgot my admin password. How can I reset it?
 Currently, password reset is available via the database.

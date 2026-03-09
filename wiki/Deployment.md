@@ -21,6 +21,7 @@ services:
     network_mode: host # Recommended for L4 streams and performance
     volumes:
       - ./data:/app/data
+      - ./letsencrypt:/etc/letsencrypt
       - ./logs:/app/logs
     environment:
       - JWT_SECRET=change_me_to_something_long_and_random
@@ -34,11 +35,14 @@ It is crucial to mount the `/app/data` volume. This directory contains:
 
 Without this volume, all your settings and certificates will be lost when the container is deleted.
 
+For Let's Encrypt, you should also persist `/etc/letsencrypt`. Certbot stores ACME account metadata, renewal configuration, archive material, and the `live/` symlinks there. Without it, container restarts can break renewals even if `/app/data` is preserved.
+
 ## Security
 1. **JWT Secret**: Always change the `JWT_SECRET` environment variable to a unique, random string.
 2. **Dashboard Port**: By default, the dashboard is on port 81. Consider restricting access to this port via a firewall or a VPN.
 3. **Running as Non-Root**: The Docker image is designed to run with necessary capabilities to bind to ports 80/443 without being full root where possible, but `network_mode: host` usually requires higher privileges.
 4. **Trusted Proxy Headers**: If PPM is behind another reverse proxy/load balancer, set `PPM_TRUSTED_PROXY_IPS` (or `TRUSTED_PROXY_IPS`) to the IP addresses of the immediate upstream proxy hop. By default, only loopback (`127.0.0.1`, `::1`) is trusted for forwarded headers.
+5. **HTTP-01 Validation**: Let's Encrypt must be able to reach PPM on external port 80. PPM intercepts `/.well-known/acme-challenge/*` before normal host routing and HTTPS redirect handling.
 
 ### Trusted Proxy Example
 

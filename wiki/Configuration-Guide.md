@@ -33,6 +33,8 @@ We support two types of Let's Encrypt challenges:
 ### HTTP-01
 - Requires port 80 to be open and reachable from the internet.
 - Does not support wildcard domains.
+- PPM intercepts `/.well-known/acme-challenge/*` before host routing and HTTPS redirects.
+- Challenge files are served from the dedicated Certbot webroot at `/app/data/acme-challenge/.well-known/acme-challenge/` inside the container.
 
 ### DNS-01 (Wildcard)
 - Required for wildcard certificates (e.g., `*.example.com`).
