@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.3.0...v1.3.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* **acme:** align HTTP-01 challenge paths ([a46d974](https://github.com/DDULDDUCK/pingora-proxy-manager/commit/a46d97480f02ad8b95429bd5d0fe062fe498753e))
+
 ## [1.3.0](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.2.1...v1.3.0) (2026-02-27)
 
 
