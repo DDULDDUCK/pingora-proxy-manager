@@ -15,6 +15,7 @@ services:
       # Let's stick to 80->8080 and 81->81 for now as per main.rs logic.
     volumes:
       - ./data:/app/data        # DB and Certs persistence
+      - ./letsencrypt:/etc/letsencrypt
       - ./logs:/app/logs        # Logs persistence
     environment:
       - JWT_SECRET=changeme_in_production_please

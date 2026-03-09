@@ -11,6 +11,7 @@ services:
       - "443:443"     # HTTPS Proxy
     volumes:
       - ./data:/app/data        # Persistence
+      - ./letsencrypt:/etc/letsencrypt
       - ./logs:/app/logs        # Logs
     environment:
       - JWT_SECRET=dev_secret_key
