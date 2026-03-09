@@ -1,10 +1,10 @@
 use super::{FilterResult, ProxyCtx, ProxyFilter};
+use crate::acme::{http01_token_path, HTTP01_CHALLENGE_PREFIX};
 use crate::constants;
 use async_trait::async_trait;
 use bytes::Bytes;
 use pingora::http::ResponseHeader;
 use pingora::prelude::*;
-use std::path::Path;
 use tokio::fs;
 
 pub struct AcmeFilter;
@@ -18,23 +18,16 @@ impl ProxyFilter for AcmeFilter {
     ) -> Result<FilterResult> {
         let path = session.req_header().uri.path();
 
-        if path.starts_with("/.well-known/acme-challenge/") {
-            let token = path.trim_start_matches("/.well-known/acme-challenge/");
-
-            // Use a relative path from the current working directory (which is usually the project root or where binary is run)
-            // instead of a hardcoded absolute path like "/app/data/acme-challenge".
-            // This makes it work on both local dev (./data) and Docker (WORKDIR /app -> ./data).
-            let file_path = Path::new("data/acme-challenge").join(token);
-
-            // Security: Prevent directory traversal attacks
-            if token.contains("..") || token.contains('/') || token.contains('\\') {
+        if path.starts_with(HTTP01_CHALLENGE_PREFIX) {
+            let token = path.trim_start_matches(HTTP01_CHALLENGE_PREFIX);
+            let Some(file_path) = http01_token_path(token) else {
                 tracing::warn!(
                     "⚠️ Attempted directory traversal in ACME challenge: {}",
                     token
                 );
                 let _ = session.respond_error(constants::http::FORBIDDEN).await;
                 return Ok(FilterResult::Handled);
-            }
+            };
 
             match fs::read(&file_path).await {
                 Ok(content) => {

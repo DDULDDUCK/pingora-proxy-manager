@@ -2,11 +2,31 @@ use crate::db::{self, DbPool};
 use crate::state::AppState;
 use std::error::Error;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::process::Command; // Import for setting file permissions
+
+pub const HTTP01_WEBROOT: &str = "data/acme-challenge";
+pub const HTTP01_CHALLENGE_PREFIX: &str = "/.well-known/acme-challenge/";
+
+pub fn is_valid_http01_token(token: &str) -> bool {
+    !token.is_empty() && !token.contains("..") && !token.contains('/') && !token.contains('\\')
+}
+
+pub fn http01_token_path(token: &str) -> Option<PathBuf> {
+    if !is_valid_http01_token(token) {
+        return None;
+    }
+
+    Some(
+        Path::new(HTTP01_WEBROOT)
+            .join(".well-known")
+            .join("acme-challenge")
+            .join(token),
+    )
+}
 
 pub struct AcmeManager {
     state: Arc<AppState>,
@@ -114,7 +134,7 @@ impl AcmeManager {
         } else {
             // --- HTTP-01 Challenge ---
             tracing::info!("👉 Using HTTP-01 (Webroot)");
-            let webroot_path = "data/acme-challenge";
+            let webroot_path = HTTP01_WEBROOT;
             fs::create_dir_all(webroot_path).await?;
 
             cmd.arg("--webroot").arg("-w").arg(webroot_path);
@@ -193,5 +213,44 @@ impl AcmeManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{http01_token_path, is_valid_http01_token, HTTP01_WEBROOT};
+    use std::path::Path;
+
+    #[test]
+    fn maps_http01_token_to_certbot_webroot_layout() {
+        let path = http01_token_path("token-123").expect("valid token path");
+
+        assert_eq!(
+            path,
+            Path::new(HTTP01_WEBROOT)
+                .join(".well-known")
+                .join("acme-challenge")
+                .join("token-123")
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_http01_tokens() {
+        for token in ["", "../token", "nested/token", r"nested\\token"] {
+            assert!(
+                !is_valid_http01_token(token),
+                "token should be invalid: {token}"
+            );
+            assert!(
+                http01_token_path(token).is_none(),
+                "path should be rejected: {token}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_single_segment_http01_tokens() {
+        assert!(is_valid_http01_token("abcDEF_123-xyz"));
+        assert!(http01_token_path("abcDEF_123-xyz").is_some());
     }
 }
