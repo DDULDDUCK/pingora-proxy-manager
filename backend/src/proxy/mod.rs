@@ -35,6 +35,19 @@ pub struct ProxyCtx {
     pub attempted_targets: Vec<String>,
 }
 
+fn configure_upstream_timeouts(peer: &mut HttpPeer, is_upgrade_request: bool) {
+    peer.options.connection_timeout =
+        Some(Duration::from_millis(constants::timeout::CONNECTION_MS));
+
+    if is_upgrade_request {
+        peer.options.read_timeout = None;
+        peer.options.write_timeout = None;
+    } else {
+        peer.options.read_timeout = Some(Duration::from_secs(constants::timeout::READ_SECS));
+        peer.options.write_timeout = Some(Duration::from_secs(constants::timeout::WRITE_SECS));
+    }
+}
+
 #[async_trait]
 impl ProxyHttp for DynamicProxy {
     type CTX = ProxyCtx;
@@ -248,7 +261,7 @@ impl ProxyHttp for DynamicProxy {
     /// 실제 라우팅 로직 (CTX 활용)
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
         if let Some(host_config) = &ctx.host_config {
@@ -304,15 +317,17 @@ impl ProxyHttp for DynamicProxy {
 
             let use_tls = scheme == "https";
             let sni = upstream_sni.cloned().unwrap_or_else(|| ctx.host.clone());
+            let is_upgrade_request = session.is_upgrade_req();
 
             tracing::info!(
-                "Routing {} -> {} (LB: Random/{} targets, TLS: {}, VerifySSL: {}, SNI: {})",
+                "Routing {} -> {} (LB: Random/{} targets, TLS: {}, VerifySSL: {}, SNI: {}, Upgrade: {})",
                 ctx.host,
                 target,
                 targets.len(),
                 use_tls,
                 verify_ssl,
-                sni
+                sni,
+                is_upgrade_request,
             );
 
             let mut peer = Box::new(HttpPeer::new(target, use_tls, sni.clone()));
@@ -327,10 +342,7 @@ impl ProxyHttp for DynamicProxy {
                 }));
             }
 
-            peer.options.connection_timeout =
-                Some(Duration::from_millis(constants::timeout::CONNECTION_MS));
-            peer.options.read_timeout = Some(Duration::from_secs(constants::timeout::READ_SECS));
-            peer.options.write_timeout = Some(Duration::from_secs(constants::timeout::WRITE_SECS));
+            configure_upstream_timeouts(&mut peer, is_upgrade_request);
 
             return Ok(peer);
         }
@@ -392,5 +404,364 @@ impl ProxyHttp for DynamicProxy {
                 "Request handled"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::ProxyConfig;
+    use std::collections::HashMap;
+    use std::thread;
+    use std::time::Instant;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::runtime::Builder;
+    use tokio::time::{sleep, timeout};
+
+    const TEST_PROXY_ADDR: &str = "127.0.0.1:38080";
+    const TEST_UPGRADE_ORIGIN_ADDR: &str = "127.0.0.1:39284";
+    const TEST_HANGING_ORIGIN_ADDR: &str = "127.0.0.1:39285";
+
+    fn init_test_stack() {
+        static INIT: OnceLock<()> = OnceLock::new();
+
+        INIT.get_or_init(|| {
+            spawn_upgrade_origin();
+            spawn_hanging_origin();
+            spawn_proxy();
+            thread::sleep(Duration::from_millis(400));
+        });
+    }
+
+    fn spawn_proxy() {
+        let state = Arc::new(AppState::new());
+        state.update_config(test_proxy_config());
+
+        thread::spawn(move || {
+            let mut server = Server::new(None).expect("create Pingora test server");
+            server.bootstrap();
+
+            let mut proxy = http_proxy_service(&server.configuration, DynamicProxy { state });
+            proxy.add_tcp(TEST_PROXY_ADDR);
+
+            server.add_service(proxy);
+            server.run_forever();
+        });
+    }
+
+    fn spawn_upgrade_origin() {
+        thread::spawn(|| {
+            let runtime = Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build upgrade origin runtime");
+
+            runtime.block_on(async {
+                let listener = TcpListener::bind(TEST_UPGRADE_ORIGIN_ADDR)
+                    .await
+                    .expect("bind upgrade origin");
+
+                loop {
+                    let (stream, _) = listener.accept().await.expect("accept upgrade origin conn");
+                    tokio::spawn(async move {
+                        let _ = handle_upgrade_origin(stream).await;
+                    });
+                }
+            });
+        });
+    }
+
+    fn spawn_hanging_origin() {
+        thread::spawn(|| {
+            let runtime = Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build hanging origin runtime");
+
+            runtime.block_on(async {
+                let listener = TcpListener::bind(TEST_HANGING_ORIGIN_ADDR)
+                    .await
+                    .expect("bind hanging origin");
+
+                loop {
+                    let (stream, _) = listener.accept().await.expect("accept hanging origin conn");
+                    tokio::spawn(async move {
+                        let _ = handle_hanging_origin(stream).await;
+                    });
+                }
+            });
+        });
+    }
+
+    fn test_proxy_config() -> ProxyConfig {
+        let mut hosts = HashMap::new();
+
+        hosts.insert(
+            "upgrade.local".to_string(),
+            HostConfig {
+                id: 1,
+                targets: vec![TEST_UPGRADE_ORIGIN_ADDR.to_string()],
+                scheme: "http".to_string(),
+                locations: vec![],
+                ssl_forced: false,
+                verify_ssl: true,
+                upstream_sni: None,
+                redirect_to: None,
+                redirect_status: 301,
+                access_list_id: None,
+                headers: vec![],
+            },
+        );
+
+        hosts.insert(
+            "location.local".to_string(),
+            HostConfig {
+                id: 2,
+                targets: vec![TEST_HANGING_ORIGIN_ADDR.to_string()],
+                scheme: "http".to_string(),
+                locations: vec![LocationConfig {
+                    path: "/api/socket.io/".to_string(),
+                    targets: vec![TEST_UPGRADE_ORIGIN_ADDR.to_string()],
+                    scheme: "http".to_string(),
+                    rewrite: false,
+                    verify_ssl: true,
+                    upstream_sni: None,
+                }],
+                ssl_forced: false,
+                verify_ssl: true,
+                upstream_sni: None,
+                redirect_to: None,
+                redirect_status: 301,
+                access_list_id: None,
+                headers: vec![],
+            },
+        );
+
+        hosts.insert(
+            "hang.local".to_string(),
+            HostConfig {
+                id: 3,
+                targets: vec![TEST_HANGING_ORIGIN_ADDR.to_string()],
+                scheme: "http".to_string(),
+                locations: vec![],
+                ssl_forced: false,
+                verify_ssl: true,
+                upstream_sni: None,
+                redirect_to: None,
+                redirect_status: 301,
+                access_list_id: None,
+                headers: vec![],
+            },
+        );
+
+        ProxyConfig {
+            hosts,
+            access_lists: HashMap::new(),
+            headers: HashMap::new(),
+        }
+    }
+
+    async fn handle_upgrade_origin(mut stream: TcpStream) -> std::io::Result<()> {
+        let _ = read_until_header_end(&mut stream).await?;
+        stream
+            .write_all(
+                b"HTTP/1.1 101 Switching Protocols\r\nConnection: upgrade\r\nUpgrade: websocket\r\n\r\n",
+            )
+            .await?;
+
+        let mut buf = [0_u8; 1024];
+        loop {
+            let n = stream.read(&mut buf).await?;
+            if n == 0 {
+                return Ok(());
+            }
+            stream.write_all(&buf[..n]).await?;
+        }
+    }
+
+    async fn handle_hanging_origin(mut stream: TcpStream) -> std::io::Result<()> {
+        let _ = read_until_header_end(&mut stream).await?;
+        sleep(Duration::from_secs(constants::timeout::READ_SECS + 5)).await;
+        Ok(())
+    }
+
+    async fn read_until_header_end(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
+        let mut data = Vec::new();
+        let mut buf = [0_u8; 1024];
+
+        loop {
+            let n = stream.read(&mut buf).await?;
+            if n == 0 {
+                return Ok(data);
+            }
+
+            data.extend_from_slice(&buf[..n]);
+            if data.windows(4).any(|window| window == b"\r\n\r\n") {
+                return Ok(data);
+            }
+        }
+    }
+
+    async fn read_response_header(stream: &mut TcpStream) -> std::io::Result<(u16, Vec<u8>)> {
+        let response = read_until_header_end(stream).await?;
+        let header_end = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|idx| idx + 4)
+            .expect("response header terminator");
+
+        let header = std::str::from_utf8(&response[..header_end]).expect("utf8 response header");
+        let status = header
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|code| code.parse::<u16>().ok())
+            .expect("status code");
+
+        Ok((status, response[header_end..].to_vec()))
+    }
+
+    async fn send_upgrade_request(host: &str, path: &str) -> TcpStream {
+        let mut stream = TcpStream::connect(TEST_PROXY_ADDR)
+            .await
+            .expect("connect to test proxy");
+        let request = format!(
+            "GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+        );
+
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .expect("write upgrade request");
+        stream.flush().await.expect("flush upgrade request");
+
+        let (status, preread) = timeout(Duration::from_secs(5), read_response_header(&mut stream))
+            .await
+            .expect("timely upgrade response")
+            .expect("read upgrade response header");
+
+        assert_eq!(status, 101);
+        assert!(
+            preread.is_empty(),
+            "upgrade response should not include preread body"
+        );
+
+        stream
+    }
+
+    #[test]
+    fn upgraded_requests_disable_short_upstream_timeouts() {
+        let mut peer = HttpPeer::new("127.0.0.1:80", false, String::new());
+
+        configure_upstream_timeouts(&mut peer, true);
+
+        assert_eq!(
+            peer.options.connection_timeout,
+            Some(Duration::from_millis(constants::timeout::CONNECTION_MS))
+        );
+        assert!(peer.options.read_timeout.is_none());
+        assert!(peer.options.write_timeout.is_none());
+    }
+
+    #[test]
+    fn standard_requests_keep_default_upstream_timeouts() {
+        let mut peer = HttpPeer::new("127.0.0.1:80", false, String::new());
+
+        configure_upstream_timeouts(&mut peer, false);
+
+        assert_eq!(
+            peer.options.connection_timeout,
+            Some(Duration::from_millis(constants::timeout::CONNECTION_MS))
+        );
+        assert_eq!(
+            peer.options.read_timeout,
+            Some(Duration::from_secs(constants::timeout::READ_SECS))
+        );
+        assert_eq!(
+            peer.options.write_timeout,
+            Some(Duration::from_secs(constants::timeout::WRITE_SECS))
+        );
+    }
+
+    #[tokio::test]
+    async fn upgraded_host_route_survives_idle_beyond_default_timeout() {
+        init_test_stack();
+
+        let mut stream =
+            send_upgrade_request("upgrade.local", "/socket.io/?EIO=4&transport=websocket").await;
+
+        sleep(Duration::from_secs(constants::timeout::READ_SECS + 1)).await;
+
+        stream
+            .write_all(b"ping")
+            .await
+            .expect("write upgraded body");
+        stream.flush().await.expect("flush upgraded body");
+
+        let mut echo = [0_u8; 4];
+        timeout(Duration::from_secs(5), stream.read_exact(&mut echo))
+            .await
+            .expect("echo should arrive")
+            .expect("read echoed upgraded bytes");
+
+        assert_eq!(&echo, b"ping");
+    }
+
+    #[tokio::test]
+    async fn upgraded_location_route_survives_idle_beyond_default_timeout() {
+        init_test_stack();
+
+        let mut stream = send_upgrade_request(
+            "location.local",
+            "/api/socket.io/?EIO=4&transport=websocket",
+        )
+        .await;
+
+        sleep(Duration::from_secs(constants::timeout::READ_SECS + 1)).await;
+
+        stream
+            .write_all(b"pong")
+            .await
+            .expect("write upgraded location body");
+        stream.flush().await.expect("flush upgraded location body");
+
+        let mut echo = [0_u8; 4];
+        timeout(Duration::from_secs(5), stream.read_exact(&mut echo))
+            .await
+            .expect("location echo should arrive")
+            .expect("read echoed location upgraded bytes");
+
+        assert_eq!(&echo, b"pong");
+    }
+
+    #[tokio::test]
+    async fn normal_http_requests_still_timeout_when_origin_never_responds() {
+        init_test_stack();
+
+        let mut stream = TcpStream::connect(TEST_PROXY_ADDR)
+            .await
+            .expect("connect to test proxy");
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: hang.local\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("write plain http request");
+        stream.flush().await.expect("flush plain http request");
+
+        let started_at = Instant::now();
+        let (status, _) = timeout(
+            Duration::from_secs(constants::timeout::READ_SECS + 5),
+            read_response_header(&mut stream),
+        )
+        .await
+        .expect("timeout response should arrive")
+        .expect("read timeout response header");
+
+        assert!(
+            started_at.elapsed()
+                >= Duration::from_secs(constants::timeout::READ_SECS.saturating_sub(1)),
+            "plain HTTP timeout should still wait roughly the default read timeout"
+        );
+        assert_eq!(status, 502);
     }
 }
