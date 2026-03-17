@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.3.1...v1.3.2) (2026-03-17)
+
+
+### Bug Fixes
+
+* **proxy:** avoid timing out upgraded upstream connections ([f0e1fc5](https://github.com/DDULDDUCK/pingora-proxy-manager/commit/f0e1fc57293cdb7e1f3f923b30ea261eb299d818))
+
 ## [1.3.1](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.3.0...v1.3.1) (2026-03-09)
 
 
