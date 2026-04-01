@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, RefreshCw, Trash2, Globe, Server, Shield, Redo2 } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Globe, Server, Shield, Redo2, type LucideIcon } from "lucide-react";
 import type { Host } from "@/hooks/useHosts";
 import { toast } from "sonner";
 import { useAddHost } from "@/hooks/useHosts";
@@ -19,7 +19,7 @@ interface AddHostDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const Section = ({ title, icon: Icon, children, className }: { title: string, icon: any, children: React.ReactNode, className?: string }) => (
+const Section = ({ title, icon: Icon, children, className }: { title: string, icon: LucideIcon, children: React.ReactNode, className?: string }) => (
   <div className={cn("p-4 rounded-lg border bg-muted/30 space-y-3", className)}>
     <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground border-b pb-2 mb-2">
       <Icon className="h-4 w-4" />
@@ -29,24 +29,45 @@ const Section = ({ title, icon: Icon, children, className }: { title: string, ic
   </div>
 );
 
+const parseOptionalNumber = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const createEmptyHostForm = (): Partial<Host> => ({
+  domain: "",
+  target: "",
+  scheme: "http",
+  ssl_forced: false,
+  verify_ssl: true,
+  upstream_sni: "",
+  connection_timeout_ms: null,
+  read_timeout_ms: null,
+  write_timeout_ms: null,
+  max_request_body_bytes: null,
+  redirect_to: "",
+  redirect_status: 301,
+  access_list_id: null
+});
+
 export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
   const { t } = useTranslation();
   const addHostMutation = useAddHost();
   const { data: accessLists } = useAccessLists();
 
   const [bulkMode, setBulkMode] = useState(false);
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
   const [bulkDomains, setBulkDomains] = useState("");
-  const [newHost, setNewHost] = useState<Partial<Host>>({
-    domain: "",
-    target: "",
-    scheme: "http",
-    ssl_forced: false,
-    verify_ssl: true,
-    upstream_sni: "",
-    redirect_to: "",
-    redirect_status: 301,
-    access_list_id: null
-  });
+  const [newHost, setNewHost] = useState<Partial<Host>>(() => createEmptyHostForm());
+
+  const resetDialogState = () => {
+    setBulkMode(false);
+    setShowAdvancedConfig(false);
+    setBulkDomains("");
+    setNewHost(createEmptyHostForm());
+  };
 
   const getTargets = () => {
     if (!newHost.target) return [""];
@@ -101,9 +122,8 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
           onSuccess: () => {
             created++;
             if (created === domains.length) {
+              resetDialogState();
               onOpenChange(false);
-              setBulkDomains("");
-              setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, verify_ssl: true, upstream_sni: "", redirect_to: "", redirect_status: 301, access_list_id: null });
               toast.success(t('hosts.bulkSuccess', { count: created }));
             }
           }
@@ -123,15 +143,20 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
 
     addHostMutation.mutate(hostPayload, {
       onSuccess: () => {
+        resetDialogState();
         onOpenChange(false);
-        setNewHost({ domain: "", target: "", scheme: "http", ssl_forced: false, verify_ssl: true, upstream_sni: "", redirect_to: "", redirect_status: 301, access_list_id: null });
       }
     });
   };
 
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { onOpenChange(isOpen); if (!isOpen) setBulkMode(false); }}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        resetDialogState();
+      }
+      onOpenChange(isOpen);
+    }}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" /> {t('hosts.addHost')}
@@ -201,7 +226,7 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
               <div className="md:col-span-5 space-y-4">
                 <div className="grid gap-2">
                   <Label>{t('hosts.scheme')}</Label>
-                  <Select value={newHost.scheme} onValueChange={v => setNewHost({...newHost, scheme: v as any})}>
+                  <Select value={newHost.scheme} onValueChange={v => setNewHost({...newHost, scheme: v as Host["scheme"]})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="http">http://</SelectItem>
@@ -266,6 +291,73 @@ export function AddHostDialog({ open, onOpenChange }: AddHostDialogProps) {
                   {t('hosts.loadBalancingHelp')}
                 </p>
               </div>
+            </div>
+
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="show_advanced_config"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={showAdvancedConfig}
+                  onChange={(e) => setShowAdvancedConfig(e.target.checked)}
+                />
+                <Label htmlFor="show_advanced_config" className="cursor-pointer text-xs font-medium">
+                  {t('hosts.showAdvancedConfig')}
+                </Label>
+              </div>
+
+              {showAdvancedConfig && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label className="text-xs">{t('hosts.connectionTimeoutMs')}</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={newHost.connection_timeout_ms ?? ""}
+                      onChange={e => setNewHost({ ...newHost, connection_timeout_ms: parseOptionalNumber(e.target.value) })}
+                      placeholder="500"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-xs">{t('hosts.readTimeoutMs')}</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={newHost.read_timeout_ms ?? ""}
+                      onChange={e => setNewHost({ ...newHost, read_timeout_ms: parseOptionalNumber(e.target.value) })}
+                      placeholder="10000"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-xs">{t('hosts.writeTimeoutMs')}</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={newHost.write_timeout_ms ?? ""}
+                      onChange={e => setNewHost({ ...newHost, write_timeout_ms: parseOptionalNumber(e.target.value) })}
+                      placeholder="5000"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-xs">{t('hosts.maxRequestBodyBytes')}</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={newHost.max_request_body_bytes ?? ""}
+                      onChange={e => setNewHost({ ...newHost, max_request_body_bytes: parseOptionalNumber(e.target.value) })}
+                      placeholder="10485760"
+                      className="text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic md:col-span-2">
+                    {t('hosts.advancedConfigHelp')}
+                  </p>
+                </div>
+              )}
             </div>
           </Section>
 

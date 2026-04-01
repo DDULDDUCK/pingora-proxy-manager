@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Edit, RefreshCw, CornerDownRight, ArrowRightLeft, Trash2, Plus, ShieldAlert, Globe, Server, Shield, Redo2 } from "lucide-react";
+import { Edit, RefreshCw, CornerDownRight, ArrowRightLeft, Trash2, Plus, ShieldAlert, Globe, Server, Shield, Redo2, type LucideIcon } from "lucide-react";
 import type { Host, Location, Header } from "@/hooks/useHosts";
 import { toast } from "sonner";
 import { useAddHost, useAddLocation, useDeleteLocation, useAddHostHeader, useDeleteHostHeader } from "@/hooks/useHosts";
@@ -21,7 +21,7 @@ interface EditHostDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const Section = ({ title, icon: Icon, children, className }: { title: string, icon: any, children: React.ReactNode, className?: string }) => (
+const Section = ({ title, icon: Icon, children, className }: { title: string, icon: LucideIcon, children: React.ReactNode, className?: string }) => (
   <div className={cn("p-4 rounded-lg border bg-muted/30 space-y-3", className)}>
     <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground border-b pb-2 mb-2 uppercase tracking-wider">
       <Icon className="h-4 w-4" />
@@ -30,6 +30,49 @@ const Section = ({ title, icon: Icon, children, className }: { title: string, ic
     {children}
   </div>
 );
+
+const parseOptionalNumber = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const createEditHostForm = (host: Host | null): Partial<Host> => ({
+  target: host?.target ?? "",
+  scheme: host?.scheme ?? "http",
+  ssl_forced: host?.ssl_forced ?? false,
+  verify_ssl: host?.verify_ssl ?? true,
+  upstream_sni: host?.upstream_sni || "",
+  connection_timeout_ms: host?.connection_timeout_ms ?? null,
+  read_timeout_ms: host?.read_timeout_ms ?? null,
+  write_timeout_ms: host?.write_timeout_ms ?? null,
+  max_request_body_bytes: host?.max_request_body_bytes ?? null,
+  redirect_to: host?.redirect_to || "",
+  redirect_status: host?.redirect_status || 301,
+  access_list_id: host?.access_list_id || null,
+});
+
+const hasAdvancedConfig = (config?: Partial<Host> | Location | null): boolean =>
+  Boolean(
+    config?.connection_timeout_ms ||
+      config?.read_timeout_ms ||
+      config?.write_timeout_ms ||
+      config?.max_request_body_bytes
+  );
+
+const createLocationForm = (location?: Partial<Location>): Location => ({
+  path: location?.path ?? "/",
+  target: location?.target ?? "",
+  scheme: location?.scheme ?? "http",
+  rewrite: location?.rewrite ?? false,
+  verify_ssl: location?.verify_ssl ?? true,
+  upstream_sni: location?.upstream_sni || "",
+  connection_timeout_ms: location?.connection_timeout_ms ?? null,
+  read_timeout_ms: location?.read_timeout_ms ?? null,
+  write_timeout_ms: location?.write_timeout_ms ?? null,
+  max_request_body_bytes: location?.max_request_body_bytes ?? null,
+});
 
 export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps) {
   const { t } = useTranslation();
@@ -40,24 +83,12 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
   const deleteHeaderMutation = useDeleteHostHeader();
   const { data: accessLists } = useAccessLists();
 
-  const [editFormHost, setEditFormHost] = useState<Partial<Host>>({});
-  const [newLocation, setNewLocation] = useState<Location>({ path: "/", target: "", scheme: "http", rewrite: false, verify_ssl: true, upstream_sni: "" });
+  const [editFormHost, setEditFormHost] = useState<Partial<Host>>(() => createEditHostForm(host));
+  const [showAdvancedHostConfig, setShowAdvancedHostConfig] = useState(() => hasAdvancedConfig(host));
+  const [showAdvancedLocationConfig, setShowAdvancedLocationConfig] = useState(false);
+  const [editingLocationPath, setEditingLocationPath] = useState<string | null>(null);
+  const [newLocation, setNewLocation] = useState<Location>(() => createLocationForm());
   const [newHeader, setNewHeader] = useState<Omit<Header, 'id'>>({ name: "", value: "", target: "request" });
-
-  useEffect(() => {
-    if (host) {
-        setEditFormHost({
-            target: host.target,
-            scheme: host.scheme,
-            ssl_forced: host.ssl_forced,
-            verify_ssl: host.verify_ssl,
-            upstream_sni: host.upstream_sni || "",
-            redirect_to: host.redirect_to || "",
-            redirect_status: host.redirect_status || 301,
-            access_list_id: host.access_list_id || null,
-        });
-    }
-  }, [host]);
 
   const getTargets = () => {
     if (!editFormHost.target) return [""];
@@ -111,9 +142,23 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
     if (!host || !newLocation.path || !newLocation.target) return;
     addLocationMutation.mutate({ domain: host.domain, location: newLocation }, {
         onSuccess: () => {
-            setNewLocation({ path: "/", target: "", scheme: "http", rewrite: false, verify_ssl: true, upstream_sni: "" });
+            setEditingLocationPath(null);
+            setShowAdvancedLocationConfig(false);
+            setNewLocation(createLocationForm());
         }
     });
+  };
+
+  const handleEditLocation = (location: Location) => {
+    setEditingLocationPath(location.path);
+    setShowAdvancedLocationConfig(hasAdvancedConfig(location));
+    setNewLocation(createLocationForm(location));
+  };
+
+  const resetLocationForm = () => {
+    setEditingLocationPath(null);
+    setShowAdvancedLocationConfig(false);
+    setNewLocation(createLocationForm());
   };
 
   const handleDeleteLocation = (path: string) => {
@@ -148,7 +193,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog key={`${host?.domain ?? "no-host"}-${open ? "open" : "closed"}`} open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
@@ -204,7 +249,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                   <div className="md:col-span-5 space-y-4">
                     <div className="grid gap-2">
                       <Label>{t('hosts.scheme')}</Label>
-                      <Select value={editFormHost.scheme} onValueChange={v => setEditFormHost({...editFormHost, scheme: v as any})}>
+                      <Select value={editFormHost.scheme} onValueChange={v => setEditFormHost({...editFormHost, scheme: v as Host["scheme"]})}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="http">http://</SelectItem>
@@ -270,6 +315,73 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                     </p>
                   </div>
                 </div>
+
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="edit_show_advanced_config"
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      checked={showAdvancedHostConfig}
+                      onChange={(e) => setShowAdvancedHostConfig(e.target.checked)}
+                    />
+                    <Label htmlFor="edit_show_advanced_config" className="cursor-pointer text-xs font-medium">
+                      {t('hosts.showAdvancedConfig')}
+                    </Label>
+                  </div>
+
+                  {showAdvancedHostConfig && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label className="text-xs">{t('hosts.connectionTimeoutMs')}</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editFormHost.connection_timeout_ms ?? ""}
+                          onChange={e => setEditFormHost({ ...editFormHost, connection_timeout_ms: parseOptionalNumber(e.target.value) })}
+                          placeholder="500"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="text-xs">{t('hosts.readTimeoutMs')}</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editFormHost.read_timeout_ms ?? ""}
+                          onChange={e => setEditFormHost({ ...editFormHost, read_timeout_ms: parseOptionalNumber(e.target.value) })}
+                          placeholder="10000"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="text-xs">{t('hosts.writeTimeoutMs')}</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editFormHost.write_timeout_ms ?? ""}
+                          onChange={e => setEditFormHost({ ...editFormHost, write_timeout_ms: parseOptionalNumber(e.target.value) })}
+                          placeholder="5000"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="text-xs">{t('hosts.maxRequestBodyBytes')}</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editFormHost.max_request_body_bytes ?? ""}
+                          onChange={e => setEditFormHost({ ...editFormHost, max_request_body_bytes: parseOptionalNumber(e.target.value) })}
+                          placeholder="10485760"
+                          className="text-sm"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground italic md:col-span-2">
+                        {t('hosts.advancedConfigHelp')}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </Section>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -331,7 +443,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="grid gap-2">
                   <Label className="text-xs">{t('hosts.pathPrefix')}</Label>
-                  <Input value={newLocation.path} onChange={e => setNewLocation({...newLocation, path: e.target.value})} placeholder="/api" className="text-sm" />
+                  <Input value={newLocation.path} onChange={e => setNewLocation({...newLocation, path: e.target.value})} placeholder="/api" className="text-sm" disabled={editingLocationPath !== null} />
                 </div>
                 <div className="grid gap-2">
                   <Label className="text-xs">{t('hosts.target')}</Label>
@@ -341,7 +453,7 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                 <div className="grid gap-2">
                   <Label className="text-xs">{t('hosts.scheme')}</Label>
-                  <Select value={newLocation.scheme} onValueChange={v => setNewLocation({...newLocation, scheme: v as any})}>
+                  <Select value={newLocation.scheme} onValueChange={v => setNewLocation({...newLocation, scheme: v as Location["scheme"]})}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="http">http</SelectItem>
@@ -373,9 +485,16 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                        <Label htmlFor="rewrite" className="cursor-pointer text-[10px] text-muted-foreground">{t('hosts.stripPath')}</Label>
                      </div>
                  </div>
-                <Button className="h-9" onClick={handleAddLocation} disabled={addLocationMutation.isPending}>
-                  <Plus className="h-4 w-4 mr-2" /> {t('common.add')}
-                </Button>
+                <div className="flex gap-2">
+                  {editingLocationPath && (
+                    <Button type="button" variant="outline" className="h-9" onClick={resetLocationForm}>
+                      {t('common.cancel')}
+                    </Button>
+                  )}
+                  <Button className="h-9" onClick={handleAddLocation} disabled={addLocationMutation.isPending}>
+                    <Plus className="h-4 w-4 mr-2" /> {editingLocationPath ? t('common.saveChanges') : t('common.add')}
+                  </Button>
+                </div>
               </div>
               <div className="mt-4 grid gap-2">
                   <Label htmlFor="loc_upstream_sni" className="text-[10px] text-muted-foreground">{t('hosts.upstreamSni')}</Label>
@@ -386,6 +505,72 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                     placeholder={newLocation.target?.split(',')[0]?.split(':')[0] || t('hosts.upstreamSniPlaceholder')}
                     className="h-8 text-[10px]"
                   />
+              </div>
+              <div className="mt-4 border-t pt-4 space-y-3">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="loc_show_advanced_config"
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={showAdvancedLocationConfig}
+                    onChange={(e) => setShowAdvancedLocationConfig(e.target.checked)}
+                  />
+                  <Label htmlFor="loc_show_advanced_config" className="cursor-pointer text-[10px] font-medium">
+                    {t('hosts.showAdvancedConfig')}
+                  </Label>
+                </div>
+
+                {showAdvancedLocationConfig && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label className="text-[10px] text-muted-foreground">{t('hosts.connectionTimeoutMs')}</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newLocation.connection_timeout_ms ?? ""}
+                        onChange={e => setNewLocation({ ...newLocation, connection_timeout_ms: parseOptionalNumber(e.target.value) })}
+                        placeholder="500"
+                        className="h-8 text-[10px]"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-[10px] text-muted-foreground">{t('hosts.readTimeoutMs')}</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newLocation.read_timeout_ms ?? ""}
+                        onChange={e => setNewLocation({ ...newLocation, read_timeout_ms: parseOptionalNumber(e.target.value) })}
+                        placeholder="10000"
+                        className="h-8 text-[10px]"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-[10px] text-muted-foreground">{t('hosts.writeTimeoutMs')}</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newLocation.write_timeout_ms ?? ""}
+                        onChange={e => setNewLocation({ ...newLocation, write_timeout_ms: parseOptionalNumber(e.target.value) })}
+                        placeholder="5000"
+                        className="h-8 text-[10px]"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-[10px] text-muted-foreground">{t('hosts.maxRequestBodyBytes')}</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newLocation.max_request_body_bytes ?? ""}
+                        onChange={e => setNewLocation({ ...newLocation, max_request_body_bytes: parseOptionalNumber(e.target.value) })}
+                        placeholder="10485760"
+                        className="h-8 text-[10px]"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground italic md:col-span-2">
+                      {t('hosts.locationOverrideHelp')} {t('hosts.advancedConfigHelp')}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -413,15 +598,25 @@ export function EditHostDialog({ host, open, onOpenChange }: EditHostDialogProps
                         <ShieldAlert className="h-3 w-3" /> {t('hosts.noSslVerify')}
                       </Badge>
                     )}
+                    {(loc.connection_timeout_ms || loc.read_timeout_ms || loc.write_timeout_ms || loc.max_request_body_bytes) && (
+                      <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-700 border-slate-200">
+                        {t('hosts.advancedConfig')}
+                      </Badge>
+                    )}
                     {loc.rewrite && (
                       <Badge variant="secondary" className="text-[10px] h-5 bg-orange-50 text-orange-700 border-orange-200">
                         {t('hosts.stripped')}
                       </Badge>
                     )}
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteLocation(loc.path)} disabled={deleteLocationMutation.isPending} className="h-8 w-8 text-destructive hover:bg-destructive/10">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => handleEditLocation(loc)} className="h-8 w-8">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteLocation(loc.path)} disabled={deleteLocationMutation.isPending} className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

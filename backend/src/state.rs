@@ -16,6 +16,10 @@ pub struct LocationConfig {
     #[serde(default = "default_verify_ssl")]
     pub verify_ssl: bool,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<u64>,
+    pub read_timeout_ms: Option<u64>,
+    pub write_timeout_ms: Option<u64>,
+    pub max_request_body_bytes: Option<u64>,
 }
 
 /// Configuration for a specific virtual host.
@@ -32,6 +36,10 @@ pub struct HostConfig {
     #[serde(default = "default_verify_ssl")]
     pub verify_ssl: bool,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<u64>,
+    pub read_timeout_ms: Option<u64>,
+    pub write_timeout_ms: Option<u64>,
+    pub max_request_body_bytes: Option<u64>,
     pub redirect_to: Option<String>,
     #[serde(default = "default_redirect_status")]
     pub redirect_status: u16,

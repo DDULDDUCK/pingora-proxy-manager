@@ -5,6 +5,10 @@ use crate::state::{
 };
 use std::collections::HashMap;
 
+fn to_u64_opt(value: Option<i64>) -> Option<u64> {
+    value.and_then(|v| u64::try_from(v).ok())
+}
+
 pub struct ConfigLoader;
 
 impl ConfigLoader {
@@ -52,6 +56,10 @@ impl ConfigLoader {
                         rewrite: loc.rewrite,
                         verify_ssl: loc.verify_ssl,
                         upstream_sni: loc.upstream_sni,
+                        connection_timeout_ms: to_u64_opt(loc.connection_timeout_ms),
+                        read_timeout_ms: to_u64_opt(loc.read_timeout_ms),
+                        write_timeout_ms: to_u64_opt(loc.write_timeout_ms),
+                        max_request_body_bytes: to_u64_opt(loc.max_request_body_bytes),
                     });
             }
 
@@ -130,6 +138,10 @@ impl ConfigLoader {
                         ssl_forced: row.ssl_forced,
                         verify_ssl: row.verify_ssl,
                         upstream_sni: row.upstream_sni,
+                        connection_timeout_ms: to_u64_opt(row.connection_timeout_ms),
+                        read_timeout_ms: to_u64_opt(row.read_timeout_ms),
+                        write_timeout_ms: to_u64_opt(row.write_timeout_ms),
+                        max_request_body_bytes: to_u64_opt(row.max_request_body_bytes),
                         redirect_to: row.redirect_to,
                         redirect_status: row.redirect_status as u16,
                         access_list_id: row.access_list_id,
@@ -144,6 +156,154 @@ impl ConfigLoader {
             })
         } else {
             Err("Failed to load initial configuration from DB".into())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::{
+        sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+        Row,
+    };
+    use std::str::FromStr;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn init_db_migrates_legacy_schema_and_preserves_nullable_advanced_config() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let db_path = temp_dir.path().join("legacy.db");
+        let connect_options = SqliteConnectOptions::from_str(&db_path.display().to_string())
+            .expect("sqlite connect options")
+            .create_if_missing(true);
+        let legacy_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(connect_options)
+            .await
+            .expect("connect legacy db");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE hosts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT NOT NULL UNIQUE,
+                target TEXT NOT NULL,
+                scheme TEXT NOT NULL DEFAULT 'http',
+                ssl_forced BOOLEAN NOT NULL DEFAULT 0,
+                redirect_to TEXT,
+                redirect_status INTEGER NOT NULL DEFAULT 301
+            )
+            "#,
+        )
+        .execute(&legacy_pool)
+        .await
+        .expect("create legacy hosts");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE locations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                host_id INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                target TEXT NOT NULL,
+                scheme TEXT NOT NULL DEFAULT 'http',
+                rewrite BOOLEAN NOT NULL DEFAULT 0,
+                FOREIGN KEY(host_id) REFERENCES hosts(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&legacy_pool)
+        .await
+        .expect("create legacy locations");
+
+        sqlx::query("INSERT INTO hosts (domain, target, scheme, ssl_forced, redirect_to, redirect_status) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("legacy.local")
+            .bind("127.0.0.1:8080")
+            .bind("http")
+            .bind(false)
+            .bind(None::<String>)
+            .bind(301_i64)
+            .execute(&legacy_pool)
+            .await
+            .expect("insert legacy host");
+
+        sqlx::query(
+            "INSERT INTO locations (host_id, path, target, scheme, rewrite) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(1_i64)
+        .bind("/api")
+        .bind("127.0.0.1:8081")
+        .bind("http")
+        .bind(false)
+        .execute(&legacy_pool)
+        .await
+        .expect("insert legacy location");
+
+        drop(legacy_pool);
+
+        let db_url = format!("sqlite://{}", db_path.display());
+        let pool = db::init_db(&db_url).await.expect("migrate db");
+        let config = ConfigLoader::load_from_db(&pool)
+            .await
+            .expect("load migrated config");
+
+        let host = config
+            .hosts
+            .get("legacy.local")
+            .expect("legacy host should exist");
+        assert_eq!(host.targets, vec!["127.0.0.1:8080"]);
+        assert_eq!(host.connection_timeout_ms, None);
+        assert_eq!(host.read_timeout_ms, None);
+        assert_eq!(host.write_timeout_ms, None);
+        assert_eq!(host.max_request_body_bytes, None);
+        assert!(
+            host.verify_ssl,
+            "legacy host should keep verify_ssl default"
+        );
+
+        let location = host
+            .locations
+            .iter()
+            .find(|location| location.path == "/api")
+            .expect("legacy location should exist");
+        assert_eq!(location.targets, vec!["127.0.0.1:8081"]);
+        assert_eq!(location.connection_timeout_ms, None);
+        assert_eq!(location.read_timeout_ms, None);
+        assert_eq!(location.write_timeout_ms, None);
+        assert_eq!(location.max_request_body_bytes, None);
+        assert!(
+            location.verify_ssl,
+            "legacy location should keep verify_ssl default"
+        );
+
+        let host_columns = sqlx::query("PRAGMA table_info(hosts)")
+            .fetch_all(&pool)
+            .await
+            .expect("fetch host table info");
+        let location_columns = sqlx::query("PRAGMA table_info(locations)")
+            .fetch_all(&pool)
+            .await
+            .expect("fetch location table info");
+
+        for expected_column in [
+            "connection_timeout_ms",
+            "read_timeout_ms",
+            "write_timeout_ms",
+            "max_request_body_bytes",
+        ] {
+            assert!(
+                host_columns
+                    .iter()
+                    .any(|row| row.get::<String, _>("name") == expected_column),
+                "hosts table should contain {expected_column}"
+            );
+            assert!(
+                location_columns
+                    .iter()
+                    .any(|row| row.get::<String, _>("name") == expected_column),
+                "locations table should contain {expected_column}"
+            );
         }
     }
 }

@@ -33,19 +33,74 @@ pub struct ProxyCtx {
     pub matched_location: Option<LocationConfig>,
     pub retry_count: usize,
     pub attempted_targets: Vec<String>,
+    pub effective_max_request_body_bytes: Option<u64>,
 }
 
-fn configure_upstream_timeouts(peer: &mut HttpPeer, is_upgrade_request: bool) {
-    peer.options.connection_timeout =
-        Some(Duration::from_millis(constants::timeout::CONNECTION_MS));
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EffectiveUpstreamConfig {
+    connection_timeout_ms: u64,
+    read_timeout_ms: Option<u64>,
+    write_timeout_ms: Option<u64>,
+    max_request_body_bytes: Option<u64>,
+}
 
-    if is_upgrade_request {
-        peer.options.read_timeout = None;
-        peer.options.write_timeout = None;
+fn resolve_effective_upstream_config(
+    host: &HostConfig,
+    location: Option<&LocationConfig>,
+    is_upgrade_request: bool,
+) -> EffectiveUpstreamConfig {
+    let connection_timeout_ms = location
+        .and_then(|loc| loc.connection_timeout_ms)
+        .or(host.connection_timeout_ms)
+        .unwrap_or(constants::timeout::CONNECTION_MS);
+
+    let max_request_body_bytes = if is_upgrade_request {
+        None
     } else {
-        peer.options.read_timeout = Some(Duration::from_secs(constants::timeout::READ_SECS));
-        peer.options.write_timeout = Some(Duration::from_secs(constants::timeout::WRITE_SECS));
+        location
+            .and_then(|loc| loc.max_request_body_bytes)
+            .or(host.max_request_body_bytes)
+    };
+
+    let read_timeout_ms = if is_upgrade_request {
+        None
+    } else {
+        Some(
+            location
+                .and_then(|loc| loc.read_timeout_ms)
+                .or(host.read_timeout_ms)
+                .unwrap_or(constants::timeout::READ_SECS * 1000),
+        )
+    };
+
+    let write_timeout_ms = if is_upgrade_request {
+        None
+    } else {
+        Some(
+            location
+                .and_then(|loc| loc.write_timeout_ms)
+                .or(host.write_timeout_ms)
+                .unwrap_or(constants::timeout::WRITE_SECS * 1000),
+        )
+    };
+
+    EffectiveUpstreamConfig {
+        connection_timeout_ms,
+        read_timeout_ms,
+        write_timeout_ms,
+        max_request_body_bytes,
     }
+}
+
+fn configure_upstream_timeouts(peer: &mut HttpPeer, config: EffectiveUpstreamConfig) {
+    peer.options.connection_timeout = Some(Duration::from_millis(config.connection_timeout_ms));
+
+    peer.options.read_timeout = config.read_timeout_ms.map(Duration::from_millis);
+    peer.options.write_timeout = config.write_timeout_ms.map(Duration::from_millis);
+}
+
+fn request_body_limit_exceeded(body_bytes_read: usize, max_request_body_bytes: u64) -> bool {
+    (body_bytes_read as u64) > max_request_body_bytes
 }
 
 #[async_trait]
@@ -59,6 +114,7 @@ impl ProxyHttp for DynamicProxy {
             matched_location: None,
             retry_count: 0,
             attempted_targets: Vec::new(),
+            effective_max_request_body_bytes: None,
         }
     }
 
@@ -153,9 +209,62 @@ impl ProxyHttp for DynamicProxy {
                 }
             }
             ctx.matched_location = matched_loc;
+
+            let effective_config = resolve_effective_upstream_config(
+                &host_config,
+                ctx.matched_location.as_ref(),
+                session.is_upgrade_req(),
+            );
+            ctx.effective_max_request_body_bytes = effective_config.max_request_body_bytes;
+
+            if let Some(max_request_body_bytes) = effective_config.max_request_body_bytes {
+                let content_length_too_large = session
+                    .req_header()
+                    .headers
+                    .get(http::header::CONTENT_LENGTH)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .is_some_and(|len| len > max_request_body_bytes);
+
+                if content_length_too_large {
+                    tracing::warn!(
+                        "Rejecting request for host {}: Content-Length exceeds max_request_body_bytes={}",
+                        ctx.host,
+                        max_request_body_bytes
+                    );
+                    session
+                        .respond_error(constants::http::PAYLOAD_TOO_LARGE)
+                        .await?;
+                    return Ok(true);
+                }
+            }
         }
 
         Ok(false)
+    }
+
+    async fn request_body_filter(
+        &self,
+        session: &mut Session,
+        _body: &mut Option<bytes::Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> Result<()> {
+        if let Some(max_request_body_bytes) = ctx.effective_max_request_body_bytes {
+            if request_body_limit_exceeded(session.body_bytes_read(), max_request_body_bytes) {
+                tracing::warn!(
+                    "Rejecting request body for host {}: body exceeded max_request_body_bytes={}",
+                    ctx.host,
+                    max_request_body_bytes
+                );
+                return Err(Error::explain(
+                    ErrorType::HTTPStatus(constants::http::PAYLOAD_TOO_LARGE),
+                    "Request body exceeds configured maximum size",
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     /// 업스트림 요청 전 필터링 (Path Rewrite 및 Request Headers 수행)
@@ -342,7 +451,13 @@ impl ProxyHttp for DynamicProxy {
                 }));
             }
 
-            configure_upstream_timeouts(&mut peer, is_upgrade_request);
+            let effective_config = resolve_effective_upstream_config(
+                host_config,
+                ctx.matched_location.as_ref(),
+                is_upgrade_request,
+            );
+
+            configure_upstream_timeouts(&mut peer, effective_config);
 
             return Ok(peer);
         }
@@ -376,12 +491,12 @@ impl ProxyHttp for DynamicProxy {
                 .total_bytes
                 .fetch_add(body_len, Ordering::Relaxed);
 
-            if status >= constants::http::OK && status < 300 {
+            if (constants::http::OK..300).contains(&status) {
                 self.state
                     .metrics
                     .status_2xx
                     .fetch_add(1, Ordering::Relaxed);
-            } else if status >= 400 && status < 500 {
+            } else if (400..500).contains(&status) {
                 self.state
                     .metrics
                     .status_4xx
@@ -422,6 +537,8 @@ mod tests {
     const TEST_PROXY_ADDR: &str = "127.0.0.1:38080";
     const TEST_UPGRADE_ORIGIN_ADDR: &str = "127.0.0.1:39284";
     const TEST_HANGING_ORIGIN_ADDR: &str = "127.0.0.1:39285";
+    const TEST_SLOW_ORIGIN_ADDR: &str = "127.0.0.1:39286";
+    const TEST_BODY_ORIGIN_ADDR: &str = "127.0.0.1:39287";
 
     fn init_test_stack() {
         static INIT: OnceLock<()> = OnceLock::new();
@@ -429,6 +546,8 @@ mod tests {
         INIT.get_or_init(|| {
             spawn_upgrade_origin();
             spawn_hanging_origin();
+            spawn_slow_origin();
+            spawn_body_origin();
             spawn_proxy();
             thread::sleep(Duration::from_millis(400));
         });
@@ -494,6 +613,50 @@ mod tests {
         });
     }
 
+    fn spawn_slow_origin() {
+        thread::spawn(|| {
+            let runtime = Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build slow origin runtime");
+
+            runtime.block_on(async {
+                let listener = TcpListener::bind(TEST_SLOW_ORIGIN_ADDR)
+                    .await
+                    .expect("bind slow origin");
+
+                loop {
+                    let (stream, _) = listener.accept().await.expect("accept slow origin conn");
+                    tokio::spawn(async move {
+                        let _ = handle_slow_origin(stream).await;
+                    });
+                }
+            });
+        });
+    }
+
+    fn spawn_body_origin() {
+        thread::spawn(|| {
+            let runtime = Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build body origin runtime");
+
+            runtime.block_on(async {
+                let listener = TcpListener::bind(TEST_BODY_ORIGIN_ADDR)
+                    .await
+                    .expect("bind body origin");
+
+                loop {
+                    let (stream, _) = listener.accept().await.expect("accept body origin conn");
+                    tokio::spawn(async move {
+                        let _ = handle_body_origin(stream).await;
+                    });
+                }
+            });
+        });
+    }
+
     fn test_proxy_config() -> ProxyConfig {
         let mut hosts = HashMap::new();
 
@@ -507,6 +670,10 @@ mod tests {
                 ssl_forced: false,
                 verify_ssl: true,
                 upstream_sni: None,
+                connection_timeout_ms: None,
+                read_timeout_ms: None,
+                write_timeout_ms: None,
+                max_request_body_bytes: None,
                 redirect_to: None,
                 redirect_status: 301,
                 access_list_id: None,
@@ -527,10 +694,18 @@ mod tests {
                     rewrite: false,
                     verify_ssl: true,
                     upstream_sni: None,
+                    connection_timeout_ms: None,
+                    read_timeout_ms: None,
+                    write_timeout_ms: None,
+                    max_request_body_bytes: None,
                 }],
                 ssl_forced: false,
                 verify_ssl: true,
                 upstream_sni: None,
+                connection_timeout_ms: None,
+                read_timeout_ms: None,
+                write_timeout_ms: None,
+                max_request_body_bytes: None,
                 redirect_to: None,
                 redirect_status: 301,
                 access_list_id: None,
@@ -548,6 +723,84 @@ mod tests {
                 ssl_forced: false,
                 verify_ssl: true,
                 upstream_sni: None,
+                connection_timeout_ms: None,
+                read_timeout_ms: None,
+                write_timeout_ms: None,
+                max_request_body_bytes: None,
+                redirect_to: None,
+                redirect_status: 301,
+                access_list_id: None,
+                headers: vec![],
+            },
+        );
+
+        hosts.insert(
+            "slow-host.local".to_string(),
+            HostConfig {
+                id: 4,
+                targets: vec![TEST_SLOW_ORIGIN_ADDR.to_string()],
+                scheme: "http".to_string(),
+                locations: vec![],
+                ssl_forced: false,
+                verify_ssl: true,
+                upstream_sni: None,
+                connection_timeout_ms: None,
+                read_timeout_ms: Some((constants::timeout::READ_SECS + 3) * 1000),
+                write_timeout_ms: None,
+                max_request_body_bytes: None,
+                redirect_to: None,
+                redirect_status: 301,
+                access_list_id: None,
+                headers: vec![],
+            },
+        );
+
+        hosts.insert(
+            "slow-location.local".to_string(),
+            HostConfig {
+                id: 5,
+                targets: vec![TEST_HANGING_ORIGIN_ADDR.to_string()],
+                scheme: "http".to_string(),
+                locations: vec![LocationConfig {
+                    path: "/api".to_string(),
+                    targets: vec![TEST_SLOW_ORIGIN_ADDR.to_string()],
+                    scheme: "http".to_string(),
+                    rewrite: false,
+                    verify_ssl: true,
+                    upstream_sni: None,
+                    connection_timeout_ms: None,
+                    read_timeout_ms: Some((constants::timeout::READ_SECS + 3) * 1000),
+                    write_timeout_ms: None,
+                    max_request_body_bytes: None,
+                }],
+                ssl_forced: false,
+                verify_ssl: true,
+                upstream_sni: None,
+                connection_timeout_ms: None,
+                read_timeout_ms: Some(1_000),
+                write_timeout_ms: None,
+                max_request_body_bytes: None,
+                redirect_to: None,
+                redirect_status: 301,
+                access_list_id: None,
+                headers: vec![],
+            },
+        );
+
+        hosts.insert(
+            "limited.local".to_string(),
+            HostConfig {
+                id: 6,
+                targets: vec![TEST_BODY_ORIGIN_ADDR.to_string()],
+                scheme: "http".to_string(),
+                locations: vec![],
+                ssl_forced: false,
+                verify_ssl: true,
+                upstream_sni: None,
+                connection_timeout_ms: None,
+                read_timeout_ms: None,
+                write_timeout_ms: None,
+                max_request_body_bytes: Some(4),
                 redirect_to: None,
                 redirect_status: 301,
                 access_list_id: None,
@@ -586,6 +839,25 @@ mod tests {
         Ok(())
     }
 
+    async fn handle_slow_origin(mut stream: TcpStream) -> std::io::Result<()> {
+        let _ = read_until_header_end(&mut stream).await?;
+        sleep(Duration::from_secs(constants::timeout::READ_SECS + 1)).await;
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK")
+            .await?;
+        stream.flush().await?;
+        Ok(())
+    }
+
+    async fn handle_body_origin(mut stream: TcpStream) -> std::io::Result<()> {
+        let _ = read_full_request(&mut stream).await?;
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK")
+            .await?;
+        stream.flush().await?;
+        Ok(())
+    }
+
     async fn read_until_header_end(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
         let mut data = Vec::new();
         let mut buf = [0_u8; 1024];
@@ -601,6 +873,57 @@ mod tests {
                 return Ok(data);
             }
         }
+    }
+
+    async fn read_full_request(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
+        let mut request = read_until_header_end(stream).await?;
+        let header_end = request
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|idx| idx + 4)
+            .expect("request header terminator");
+        let header = std::str::from_utf8(&request[..header_end]).expect("utf8 request header");
+        let body = &request[header_end..];
+
+        let content_length = header.lines().find_map(|line| {
+            line.split_once(':').and_then(|(name, value)| {
+                name.eq_ignore_ascii_case("Content-Length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+        });
+        let is_chunked = header.lines().any(|line| {
+            line.split_once(':').is_some_and(|(name, value)| {
+                name.eq_ignore_ascii_case("Transfer-Encoding")
+                    && value.to_ascii_lowercase().contains("chunked")
+            })
+        });
+
+        if let Some(content_length) = content_length {
+            let remaining = content_length.saturating_sub(body.len());
+            if remaining > 0 {
+                let mut extra = vec![0_u8; remaining];
+                stream.read_exact(&mut extra).await?;
+                request.extend_from_slice(&extra);
+            }
+            return Ok(request);
+        }
+
+        if is_chunked {
+            let mut buf = [0_u8; 1024];
+            while !request[header_end..]
+                .windows(5)
+                .any(|window| window == b"0\r\n\r\n")
+            {
+                let n = stream.read(&mut buf).await?;
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buf[..n]);
+            }
+        }
+
+        Ok(request)
     }
 
     async fn read_response_header(stream: &mut TcpStream) -> std::io::Result<(u16, Vec<u8>)> {
@@ -653,8 +976,28 @@ mod tests {
     #[test]
     fn upgraded_requests_disable_short_upstream_timeouts() {
         let mut peer = HttpPeer::new("127.0.0.1:80", false, String::new());
+        let host = HostConfig {
+            id: 1,
+            targets: vec!["127.0.0.1:80".to_string()],
+            scheme: "http".to_string(),
+            locations: vec![],
+            ssl_forced: false,
+            verify_ssl: true,
+            upstream_sni: None,
+            connection_timeout_ms: None,
+            read_timeout_ms: Some(90_000),
+            write_timeout_ms: Some(45_000),
+            max_request_body_bytes: Some(1_024),
+            redirect_to: None,
+            redirect_status: 301,
+            access_list_id: None,
+            headers: vec![],
+        };
 
-        configure_upstream_timeouts(&mut peer, true);
+        configure_upstream_timeouts(
+            &mut peer,
+            resolve_effective_upstream_config(&host, None, true),
+        );
 
         assert_eq!(
             peer.options.connection_timeout,
@@ -665,10 +1008,55 @@ mod tests {
     }
 
     #[test]
+    fn upgraded_requests_ignore_request_body_limits() {
+        let host = HostConfig {
+            id: 1,
+            targets: vec!["127.0.0.1:80".to_string()],
+            scheme: "http".to_string(),
+            locations: vec![],
+            ssl_forced: false,
+            verify_ssl: true,
+            upstream_sni: None,
+            connection_timeout_ms: None,
+            read_timeout_ms: Some(90_000),
+            write_timeout_ms: Some(45_000),
+            max_request_body_bytes: Some(1_024),
+            redirect_to: None,
+            redirect_status: 301,
+            access_list_id: None,
+            headers: vec![],
+        };
+
+        let effective = resolve_effective_upstream_config(&host, None, true);
+
+        assert!(effective.max_request_body_bytes.is_none());
+    }
+
+    #[test]
     fn standard_requests_keep_default_upstream_timeouts() {
         let mut peer = HttpPeer::new("127.0.0.1:80", false, String::new());
+        let host = HostConfig {
+            id: 1,
+            targets: vec!["127.0.0.1:80".to_string()],
+            scheme: "http".to_string(),
+            locations: vec![],
+            ssl_forced: false,
+            verify_ssl: true,
+            upstream_sni: None,
+            connection_timeout_ms: None,
+            read_timeout_ms: None,
+            write_timeout_ms: None,
+            max_request_body_bytes: None,
+            redirect_to: None,
+            redirect_status: 301,
+            access_list_id: None,
+            headers: vec![],
+        };
 
-        configure_upstream_timeouts(&mut peer, false);
+        configure_upstream_timeouts(
+            &mut peer,
+            resolve_effective_upstream_config(&host, None, false),
+        );
 
         assert_eq!(
             peer.options.connection_timeout,
@@ -676,12 +1064,63 @@ mod tests {
         );
         assert_eq!(
             peer.options.read_timeout,
-            Some(Duration::from_secs(constants::timeout::READ_SECS))
+            Some(Duration::from_millis(constants::timeout::READ_SECS * 1000))
         );
         assert_eq!(
             peer.options.write_timeout,
-            Some(Duration::from_secs(constants::timeout::WRITE_SECS))
+            Some(Duration::from_millis(constants::timeout::WRITE_SECS * 1000))
         );
+    }
+
+    #[test]
+    fn location_timeout_overrides_host_timeout() {
+        let host = HostConfig {
+            id: 1,
+            targets: vec!["127.0.0.1:80".to_string()],
+            scheme: "http".to_string(),
+            locations: vec![],
+            ssl_forced: false,
+            verify_ssl: true,
+            upstream_sni: None,
+            connection_timeout_ms: Some(2_000),
+            read_timeout_ms: Some(10_000),
+            write_timeout_ms: Some(5_000),
+            max_request_body_bytes: Some(1024),
+            redirect_to: None,
+            redirect_status: 301,
+            access_list_id: None,
+            headers: vec![],
+        };
+        let location = LocationConfig {
+            path: "/api".to_string(),
+            targets: vec!["127.0.0.1:81".to_string()],
+            scheme: "http".to_string(),
+            rewrite: false,
+            verify_ssl: true,
+            upstream_sni: None,
+            connection_timeout_ms: Some(7_500),
+            read_timeout_ms: Some(90_000),
+            write_timeout_ms: Some(30_000),
+            max_request_body_bytes: Some(2048),
+        };
+
+        let effective = resolve_effective_upstream_config(&host, Some(&location), false);
+
+        assert_eq!(
+            effective,
+            EffectiveUpstreamConfig {
+                connection_timeout_ms: 7_500,
+                read_timeout_ms: Some(90_000),
+                write_timeout_ms: Some(30_000),
+                max_request_body_bytes: Some(2048),
+            }
+        );
+    }
+
+    #[test]
+    fn request_body_limit_uses_total_bytes_read_without_double_counting() {
+        assert!(!request_body_limit_exceeded(4, 4));
+        assert!(request_body_limit_exceeded(5, 4));
     }
 
     #[tokio::test]
@@ -763,5 +1202,117 @@ mod tests {
             "plain HTTP timeout should still wait roughly the default read timeout"
         );
         assert_eq!(status, 502);
+    }
+
+    #[tokio::test]
+    async fn host_level_read_timeout_override_allows_slow_upstream_response() {
+        init_test_stack();
+
+        let mut stream = TcpStream::connect(TEST_PROXY_ADDR)
+            .await
+            .expect("connect to test proxy");
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: slow-host.local\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("write slow host request");
+        stream.flush().await.expect("flush slow host request");
+
+        let started_at = Instant::now();
+        let (status, _) = timeout(
+            Duration::from_secs(constants::timeout::READ_SECS + 8),
+            read_response_header(&mut stream),
+        )
+        .await
+        .expect("slow response should arrive")
+        .expect("read slow host response header");
+
+        assert!(
+            started_at.elapsed() >= Duration::from_secs(constants::timeout::READ_SECS),
+            "slow host request should wait past the default timeout before succeeding"
+        );
+        assert_eq!(status, 200);
+    }
+
+    #[tokio::test]
+    async fn location_level_read_timeout_override_allows_slow_upstream_response() {
+        init_test_stack();
+
+        let mut stream = TcpStream::connect(TEST_PROXY_ADDR)
+            .await
+            .expect("connect to test proxy");
+        stream
+            .write_all(
+                b"GET /api/slow HTTP/1.1\r\nHost: slow-location.local\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .expect("write slow location request");
+        stream.flush().await.expect("flush slow location request");
+
+        let started_at = Instant::now();
+        let (status, _) = timeout(
+            Duration::from_secs(constants::timeout::READ_SECS + 8),
+            read_response_header(&mut stream),
+        )
+        .await
+        .expect("slow location response should arrive")
+        .expect("read slow location response header");
+
+        assert!(
+            started_at.elapsed() >= Duration::from_secs(constants::timeout::READ_SECS),
+            "slow location request should wait past the host timeout and honor the location override"
+        );
+        assert_eq!(status, 200);
+    }
+
+    #[tokio::test]
+    async fn oversized_content_length_returns_payload_too_large() {
+        init_test_stack();
+
+        let mut stream = TcpStream::connect(TEST_PROXY_ADDR)
+            .await
+            .expect("connect to test proxy");
+        stream
+            .write_all(
+                b"POST /upload HTTP/1.1\r\nHost: limited.local\r\nContent-Length: 5\r\nConnection: close\r\n\r\nabcde",
+            )
+            .await
+            .expect("write oversized content-length request");
+        stream
+            .flush()
+            .await
+            .expect("flush oversized content-length request");
+
+        let (status, _) = timeout(Duration::from_secs(5), read_response_header(&mut stream))
+            .await
+            .expect("payload-too-large response should arrive")
+            .expect("read payload-too-large response header");
+
+        assert_eq!(status, constants::http::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn chunked_request_overflow_returns_payload_too_large() {
+        init_test_stack();
+
+        let mut stream = TcpStream::connect(TEST_PROXY_ADDR)
+            .await
+            .expect("connect to test proxy");
+        stream
+            .write_all(
+                b"POST /upload HTTP/1.1\r\nHost: limited.local\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n2\r\nab\r\n3\r\ncde\r\n0\r\n\r\n",
+            )
+            .await
+            .expect("write chunked overflow request");
+        stream
+            .flush()
+            .await
+            .expect("flush chunked overflow request");
+
+        let (status, _) = timeout(Duration::from_secs(5), read_response_header(&mut stream))
+            .await
+            .expect("chunked payload-too-large response should arrive")
+            .expect("read chunked payload-too-large response header");
+
+        assert_eq!(status, constants::http::PAYLOAD_TOO_LARGE);
     }
 }

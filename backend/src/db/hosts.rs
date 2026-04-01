@@ -8,6 +8,10 @@ pub struct HostRow {
     pub scheme: String,
     pub ssl_forced: bool,
     pub verify_ssl: bool,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
     pub redirect_to: Option<String>,
     pub redirect_status: i64,
     pub access_list_id: Option<i64>,
@@ -24,6 +28,10 @@ pub struct LocationRow {
     pub rewrite: bool,
     pub verify_ssl: bool,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -33,6 +41,36 @@ pub struct HeaderRow {
     pub name: String,
     pub value: String,
     pub target: String, // 'request' or 'response'
+}
+
+pub struct UpsertHostParams<'a> {
+    pub domain: &'a str,
+    pub target: &'a str,
+    pub scheme: &'a str,
+    pub ssl_forced: bool,
+    pub verify_ssl: bool,
+    pub upstream_sni: Option<&'a str>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
+    pub redirect_to: Option<&'a str>,
+    pub redirect_status: i64,
+    pub access_list_id: Option<i64>,
+}
+
+pub struct UpsertLocationParams<'a> {
+    pub host_id: i64,
+    pub path: &'a str,
+    pub target: &'a str,
+    pub scheme: &'a str,
+    pub rewrite: bool,
+    pub verify_ssl: bool,
+    pub upstream_sni: Option<&'a str>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
 }
 
 /// Retrieves all configured hosts from the database.
@@ -168,42 +206,39 @@ pub async fn delete_header(pool: &DbPool, id: i64) -> Result<(), sqlx::Error> {
 ///
 /// # Returns
 /// * `Result<(), sqlx::Error>` - Success or a database error
-pub async fn upsert_host(
-    pool: &DbPool,
-    domain: &str,
-    target: &str,
-    scheme: &str,
-    ssl_forced: bool,
-    verify_ssl: bool,
-    upstream_sni: Option<String>,
-    redirect_to: Option<String>,
-    redirect_status: i64,
-    access_list_id: Option<i64>,
-) -> Result<(), sqlx::Error> {
+pub async fn upsert_host(pool: &DbPool, params: UpsertHostParams<'_>) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO hosts (domain, target, scheme, ssl_forced, verify_ssl, upstream_sni, redirect_to, redirect_status, access_list_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO hosts (domain, target, scheme, ssl_forced, verify_ssl, upstream_sni, connection_timeout_ms, read_timeout_ms, write_timeout_ms, max_request_body_bytes, redirect_to, redirect_status, access_list_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(domain) DO UPDATE SET 
             target = excluded.target, 
             scheme = excluded.scheme,
             ssl_forced = excluded.ssl_forced,
             verify_ssl = excluded.verify_ssl,
             upstream_sni = excluded.upstream_sni,
+            connection_timeout_ms = excluded.connection_timeout_ms,
+            read_timeout_ms = excluded.read_timeout_ms,
+            write_timeout_ms = excluded.write_timeout_ms,
+            max_request_body_bytes = excluded.max_request_body_bytes,
             redirect_to = excluded.redirect_to,
             redirect_status = excluded.redirect_status,
             access_list_id = excluded.access_list_id
         "#,
     )
-    .bind(domain)
-    .bind(target)
-    .bind(scheme)
-    .bind(ssl_forced)
-    .bind(verify_ssl)
-    .bind(upstream_sni)
-    .bind(redirect_to)
-    .bind(redirect_status)
-    .bind(access_list_id)
+    .bind(params.domain)
+    .bind(params.target)
+    .bind(params.scheme)
+    .bind(params.ssl_forced)
+    .bind(params.verify_ssl)
+    .bind(params.upstream_sni)
+    .bind(params.connection_timeout_ms)
+    .bind(params.read_timeout_ms)
+    .bind(params.write_timeout_ms)
+    .bind(params.max_request_body_bytes)
+    .bind(params.redirect_to)
+    .bind(params.redirect_status)
+    .bind(params.access_list_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -240,30 +275,28 @@ pub async fn delete_host(pool: &DbPool, domain: &str) -> Result<(), sqlx::Error>
 /// * `Result<(), sqlx::Error>` - Success or a database error
 pub async fn upsert_location(
     pool: &DbPool,
-    host_id: i64,
-    path: &str,
-    target: &str,
-    scheme: &str,
-    rewrite: bool,
-    verify_ssl: bool,
-    upstream_sni: Option<String>,
+    params: UpsertLocationParams<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM locations WHERE host_id = ? AND path = ?")
-        .bind(host_id)
-        .bind(path)
+        .bind(params.host_id)
+        .bind(params.path)
         .execute(pool)
         .await?;
 
     sqlx::query(
-        "INSERT INTO locations (host_id, path, target, scheme, rewrite, verify_ssl, upstream_sni) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO locations (host_id, path, target, scheme, rewrite, verify_ssl, upstream_sni, connection_timeout_ms, read_timeout_ms, write_timeout_ms, max_request_body_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(host_id)
-    .bind(path)
-    .bind(target)
-    .bind(scheme)
-    .bind(rewrite)
-    .bind(verify_ssl)
-    .bind(upstream_sni)
+    .bind(params.host_id)
+    .bind(params.path)
+    .bind(params.target)
+    .bind(params.scheme)
+    .bind(params.rewrite)
+    .bind(params.verify_ssl)
+    .bind(params.upstream_sni)
+    .bind(params.connection_timeout_ms)
+    .bind(params.read_timeout_ms)
+    .bind(params.write_timeout_ms)
+    .bind(params.max_request_body_bytes)
     .execute(pool)
     .await?;
     Ok(())

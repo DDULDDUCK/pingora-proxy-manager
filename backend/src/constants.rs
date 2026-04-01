@@ -8,6 +8,7 @@ pub mod http {
     pub const INTERNAL_ERROR: u16 = StatusCode::INTERNAL_SERVER_ERROR.as_u16();
     pub const UNAUTHORIZED: u16 = StatusCode::UNAUTHORIZED.as_u16();
     pub const CREATED: u16 = StatusCode::CREATED.as_u16();
+    pub const PAYLOAD_TOO_LARGE: u16 = StatusCode::PAYLOAD_TOO_LARGE.as_u16();
 }
 
 /// Network Configuration

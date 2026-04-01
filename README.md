@@ -72,6 +72,23 @@ services:
 >
 > For Let's Encrypt, keep both `./data:/app/data` and `./letsencrypt:/etc/letsencrypt` mounted. HTTP-01 validation reaches PPM over host port 80, which the container forwards to the app's internal port 8080.
 
+### Advanced upstream controls
+
+Proxy Hosts and Locations now support optional advanced upstream overrides in the UI:
+
+- `connection_timeout_ms`
+- `read_timeout_ms`
+- `write_timeout_ms`
+- `max_request_body_bytes`
+
+If left blank, PPM keeps its current built-in defaults:
+
+- connection timeout: `500ms`
+- read timeout: `10000ms`
+- write timeout: `5000ms`
+
+Location-level values override host-level values. Upgrade/WebSocket requests continue to disable upstream read/write timeouts to avoid idle disconnects.
+
 ### Optional: If you run PPM behind another reverse proxy
 
 If your traffic path is `Client -> Cloudflare/Nginx/ALB -> PPM`, set `PPM_TRUSTED_PROXY_IPS` (or `TRUSTED_PROXY_IPS`) to the IP(s) of the immediate proxy hop. Otherwise, PPM only trusts loopback for forwarded headers and may not use `X-Forwarded-For` / `X-Forwarded-Proto`.

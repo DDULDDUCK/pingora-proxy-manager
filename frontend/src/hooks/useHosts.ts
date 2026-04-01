@@ -9,6 +9,10 @@ export interface Location {
   rewrite?: boolean;
   verify_ssl?: boolean;
   upstream_sni?: string;
+  connection_timeout_ms?: number | null;
+  read_timeout_ms?: number | null;
+  write_timeout_ms?: number | null;
+  max_request_body_bytes?: number | null;
 }
 
 export interface Header {
@@ -25,6 +29,10 @@ export interface Host {
   ssl_forced?: boolean;
   verify_ssl?: boolean;
   upstream_sni?: string;
+  connection_timeout_ms?: number | null;
+  read_timeout_ms?: number | null;
+  write_timeout_ms?: number | null;
+  max_request_body_bytes?: number | null;
   redirect_to?: string | null;
   redirect_status?: number;
   locations?: Location[];

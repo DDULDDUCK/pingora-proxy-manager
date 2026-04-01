@@ -1,4 +1,3 @@
-use crate::state::LocationConfig;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -20,6 +19,10 @@ pub struct CreateHostReq {
     pub ssl_forced: Option<bool>,
     pub verify_ssl: Option<bool>,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
     pub redirect_to: Option<String>,
     pub redirect_status: Option<i64>,
     pub access_list_id: Option<i64>,
@@ -33,6 +36,10 @@ pub struct CreateLocationReq {
     pub rewrite: Option<bool>,
     pub verify_ssl: Option<bool>,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -48,6 +55,10 @@ pub struct LocationRes {
     pub rewrite: bool,
     pub verify_ssl: bool,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -58,6 +69,10 @@ pub struct HostRes {
     pub ssl_forced: bool,
     pub verify_ssl: bool,
     pub upstream_sni: Option<String>,
+    pub connection_timeout_ms: Option<i64>,
+    pub read_timeout_ms: Option<i64>,
+    pub write_timeout_ms: Option<i64>,
+    pub max_request_body_bytes: Option<i64>,
     pub redirect_to: Option<String>,
     pub redirect_status: u16,
     pub locations: Vec<LocationRes>,
