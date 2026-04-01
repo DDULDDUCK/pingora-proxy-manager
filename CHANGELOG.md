@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.3.2...v1.4.0) (2026-04-01)
+
+
+### Features
+
+* **release:** enforce semantic pull request titles ([63c34e4](https://github.com/DDULDDUCK/pingora-proxy-manager/commit/63c34e4b1ccd5c0970e911098572c6051a0820e3))
+
 ## [1.3.2](https://github.com/DDULDDUCK/pingora-proxy-manager/compare/v1.3.1...v1.3.2) (2026-03-17)
 
 
