@@ -32,6 +32,45 @@ Authenticates a user and returns a JWT.
 ### `GET /hosts`
 List all proxy hosts.
 
+Each host object now includes these optional advanced upstream fields:
+
+- `connection_timeout_ms`
+- `read_timeout_ms`
+- `write_timeout_ms`
+- `max_request_body_bytes`
+
+Location objects returned inside `locations` include the same four optional fields.
+
+**Response Example:**
+```json
+[
+  {
+    "domain": "example.com",
+    "target": "127.0.0.1:3000",
+    "scheme": "http",
+    "ssl_forced": true,
+    "verify_ssl": true,
+    "connection_timeout_ms": null,
+    "read_timeout_ms": 60000,
+    "write_timeout_ms": null,
+    "max_request_body_bytes": 10485760,
+    "locations": [
+      {
+        "path": "/api",
+        "target": "127.0.0.1:4000",
+        "scheme": "http",
+        "rewrite": false,
+        "verify_ssl": true,
+        "connection_timeout_ms": null,
+        "read_timeout_ms": 90000,
+        "write_timeout_ms": null,
+        "max_request_body_bytes": null
+      }
+    ]
+  }
+]
+```
+
 ### `POST /hosts`
 Add a new proxy host.
 
@@ -41,12 +80,41 @@ Add a new proxy host.
   "domain": "example.com",
   "target": "127.0.0.1:3000",
   "scheme": "http",
-  "ssl_forced": true
+  "ssl_forced": true,
+  "connection_timeout_ms": 500,
+  "read_timeout_ms": 10000,
+  "write_timeout_ms": 5000,
+  "max_request_body_bytes": 10485760
 }
 ```
 
+All four advanced fields are optional. When omitted or set to `null`, PPM keeps the built-in defaults.
+
 ### `DELETE /hosts/{domain}`
 Delete a proxy host.
+
+### `POST /hosts/{domain}/locations`
+Add or replace a location for a proxy host.
+
+**Request Body:**
+```json
+{
+  "path": "/api",
+  "target": "127.0.0.1:4000",
+  "scheme": "http",
+  "rewrite": false,
+  "verify_ssl": true,
+  "connection_timeout_ms": 500,
+  "read_timeout_ms": 90000,
+  "write_timeout_ms": 5000,
+  "max_request_body_bytes": 10485760
+}
+```
+
+The same four advanced fields are optional here as well. When omitted or set to `null`, the location inherits the host-level value first, then PPM falls back to the built-in defaults.
+
+### `DELETE /hosts/{domain}/locations?path=/api`
+Delete a location from a proxy host.
 
 ---
 

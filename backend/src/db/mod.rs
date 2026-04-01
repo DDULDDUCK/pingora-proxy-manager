@@ -35,6 +35,10 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
             scheme TEXT NOT NULL DEFAULT 'http',
             ssl_forced BOOLEAN NOT NULL DEFAULT 0,
             verify_ssl BOOLEAN NOT NULL DEFAULT 1,
+            connection_timeout_ms INTEGER,
+            read_timeout_ms INTEGER,
+            write_timeout_ms INTEGER,
+            max_request_body_bytes INTEGER,
             redirect_to TEXT,
             redirect_status INTEGER NOT NULL DEFAULT 301,
             access_list_id INTEGER,
@@ -60,6 +64,18 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
     let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN upstream_sni TEXT")
         .execute(&pool)
         .await;
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN connection_timeout_ms INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN read_timeout_ms INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN write_timeout_ms INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE hosts ADD COLUMN max_request_body_bytes INTEGER")
+        .execute(&pool)
+        .await;
 
     // Locations (경로별 라우팅) 테이블 생성
     sqlx::query(
@@ -73,6 +89,10 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
             rewrite BOOLEAN NOT NULL DEFAULT 0,
             verify_ssl BOOLEAN NOT NULL DEFAULT 1,
             upstream_sni TEXT,
+            connection_timeout_ms INTEGER,
+            read_timeout_ms INTEGER,
+            write_timeout_ms INTEGER,
+            max_request_body_bytes INTEGER,
             FOREIGN KEY(host_id) REFERENCES hosts(id) ON DELETE CASCADE
         );
         "#,
@@ -87,6 +107,18 @@ pub async fn init_db(db_url: &str) -> Result<DbPool, Box<dyn Error>> {
 
     // 마이그레이션: upstream_sni 컬럼 추가 for locations
     let _ = sqlx::query("ALTER TABLE locations ADD COLUMN upstream_sni TEXT")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN connection_timeout_ms INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN read_timeout_ms INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN write_timeout_ms INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE locations ADD COLUMN max_request_body_bytes INTEGER")
         .execute(&pool)
         .await;
 

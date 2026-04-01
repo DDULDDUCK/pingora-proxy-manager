@@ -14,6 +14,14 @@ use axum::{
     http::StatusCode,
 };
 
+fn to_i64_opt(value: Option<u64>) -> Option<i64> {
+    value.and_then(|v| i64::try_from(v).ok())
+}
+
+fn sanitize_optional_i64(value: Option<i64>) -> Option<i64> {
+    value.filter(|v| *v > 0)
+}
+
 pub async fn list_hosts(
     _: Claims,
     State(state): State<ApiState>,
@@ -32,6 +40,10 @@ pub async fn list_hosts(
             redirect_to: c.redirect_to.clone(),
             redirect_status: c.redirect_status,
             upstream_sni: c.upstream_sni.clone(),
+            connection_timeout_ms: to_i64_opt(c.connection_timeout_ms),
+            read_timeout_ms: to_i64_opt(c.read_timeout_ms),
+            write_timeout_ms: to_i64_opt(c.write_timeout_ms),
+            max_request_body_bytes: to_i64_opt(c.max_request_body_bytes),
             // Need to map locations too because they also have targets: Vec<String>
             locations: c
                 .locations
@@ -43,6 +55,10 @@ pub async fn list_hosts(
                     rewrite: loc.rewrite,
                     verify_ssl: loc.verify_ssl,
                     upstream_sni: loc.upstream_sni.clone(),
+                    connection_timeout_ms: to_i64_opt(loc.connection_timeout_ms),
+                    read_timeout_ms: to_i64_opt(loc.read_timeout_ms),
+                    write_timeout_ms: to_i64_opt(loc.write_timeout_ms),
+                    max_request_body_bytes: to_i64_opt(loc.max_request_body_bytes),
                 })
                 .collect(),
             access_list_id: c.access_list_id,
@@ -74,6 +90,10 @@ pub async fn add_host(
     let ssl_forced = payload.ssl_forced.unwrap_or(false);
     let verify_ssl = payload.verify_ssl.unwrap_or(true);
     let redirect_status = payload.redirect_status.unwrap_or(301);
+    let connection_timeout_ms = sanitize_optional_i64(payload.connection_timeout_ms);
+    let read_timeout_ms = sanitize_optional_i64(payload.read_timeout_ms);
+    let write_timeout_ms = sanitize_optional_i64(payload.write_timeout_ms);
+    let max_request_body_bytes = sanitize_optional_i64(payload.max_request_body_bytes);
 
     let is_update = db::get_host_id(&state.db_pool, &payload.domain)
         .await?
@@ -81,27 +101,37 @@ pub async fn add_host(
 
     db::upsert_host(
         &state.db_pool,
-        &payload.domain,
-        &payload.target, // DB expects String, so this is fine (CSV)
-        &scheme,
-        ssl_forced,
-        verify_ssl,
-        payload.upstream_sni.clone(),
-        payload.redirect_to.clone(),
-        redirect_status,
-        payload.access_list_id,
+        db::UpsertHostParams {
+            domain: &payload.domain,
+            target: &payload.target, // DB expects String, so this is fine (CSV)
+            scheme: &scheme,
+            ssl_forced,
+            verify_ssl,
+            upstream_sni: payload.upstream_sni.as_deref(),
+            connection_timeout_ms,
+            read_timeout_ms,
+            write_timeout_ms,
+            max_request_body_bytes,
+            redirect_to: payload.redirect_to.as_deref(),
+            redirect_status,
+            access_list_id: payload.access_list_id,
+        },
     )
     .await?;
 
     let action = if is_update { "update" } else { "create" };
     let details = format!(
-        "domain={}, target={}, scheme={}, ssl_forced={}, verify_ssl={}, upstream_sni={:?}, redirect_to={:?}, access_list_id={:?}",
+        "domain={}, target={}, scheme={}, ssl_forced={}, verify_ssl={}, upstream_sni={:?}, connection_timeout_ms={:?}, read_timeout_ms={:?}, write_timeout_ms={:?}, max_request_body_bytes={:?}, redirect_to={:?}, access_list_id={:?}",
         payload.domain,
         payload.target,
         scheme,
         ssl_forced,
         verify_ssl,
         payload.upstream_sni,
+        connection_timeout_ms,
+        read_timeout_ms,
+        write_timeout_ms,
+        max_request_body_bytes,
         payload.redirect_to,
         payload.access_list_id
     );
@@ -165,22 +195,32 @@ pub async fn add_location(
     let scheme = payload.scheme.clone().unwrap_or_else(|| "http".to_string());
     let rewrite = payload.rewrite.unwrap_or(false);
     let verify_ssl = payload.verify_ssl.unwrap_or(true);
+    let connection_timeout_ms = sanitize_optional_i64(payload.connection_timeout_ms);
+    let read_timeout_ms = sanitize_optional_i64(payload.read_timeout_ms);
+    let write_timeout_ms = sanitize_optional_i64(payload.write_timeout_ms);
+    let max_request_body_bytes = sanitize_optional_i64(payload.max_request_body_bytes);
 
     db::upsert_location(
         &state.db_pool,
-        host_id,
-        &payload.path,
-        &payload.target, // DB expects String (CSV)
-        &scheme,
-        rewrite,
-        verify_ssl,
-        payload.upstream_sni.clone(),
+        db::UpsertLocationParams {
+            host_id,
+            path: &payload.path,
+            target: &payload.target, // DB expects String (CSV)
+            scheme: &scheme,
+            rewrite,
+            verify_ssl,
+            upstream_sni: payload.upstream_sni.as_deref(),
+            connection_timeout_ms,
+            read_timeout_ms,
+            write_timeout_ms,
+            max_request_body_bytes,
+        },
     )
     .await?;
 
     let details = format!(
-        "host={}, path={}, target={}, scheme={}, rewrite={}, verify_ssl={}, upstream_sni={:?}",
-        domain, payload.path, payload.target, scheme, rewrite, verify_ssl, payload.upstream_sni
+        "host={}, path={}, target={}, scheme={}, rewrite={}, verify_ssl={}, upstream_sni={:?}, connection_timeout_ms={:?}, read_timeout_ms={:?}, write_timeout_ms={:?}, max_request_body_bytes={:?}",
+        domain, payload.path, payload.target, scheme, rewrite, verify_ssl, payload.upstream_sni, connection_timeout_ms, read_timeout_ms, write_timeout_ms, max_request_body_bytes
     );
     let _ = db::insert_audit_log(
         &state.db_pool,

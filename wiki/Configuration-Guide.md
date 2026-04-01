@@ -17,6 +17,7 @@ A Proxy Host is the primary way to route incoming HTTP/HTTPS traffic.
 - **Forward Host**: The IP address or hostname of your internal service.
 - **Forward Port**: The port your service is listening on.
 - **SSL Forced**: Redirect all HTTP traffic to HTTPS automatically.
+- **Advanced Config**: Optional per-host upstream overrides for `connection_timeout_ms`, `read_timeout_ms`, `write_timeout_ms`, and `max_request_body_bytes`. Blank values keep defaults.
 
 ## 2. Locations & Path Routing
 You can add multiple locations to a single Proxy Host to route different paths to different services.
@@ -26,6 +27,17 @@ You can add multiple locations to a single Proxy Host to route different paths t
 | **Path** | The URL path to match (e.g., `/api`). |
 | **Target** | The upstream address for this specific path. |
 | **Rewrite** | If enabled, the matched path is removed from the URL before forwarding (e.g., `/api/users` -> `/users`). |
+| **Advanced Config** | Optional per-location upstream overrides. Location values override the host-level values for matching requests. |
+
+## Default upstream behavior
+
+Unless overridden in Advanced Config, PPM keeps these built-in defaults for normal HTTP proxy requests:
+
+- `connection_timeout_ms`: `500`
+- `read_timeout_ms`: `10000`
+- `write_timeout_ms`: `5000`
+
+Upgrade/WebSocket requests keep the connection timeout but do not apply upstream read/write timeouts.
 
 ## 3. SSL Certificates
 We support two types of Let's Encrypt challenges:
