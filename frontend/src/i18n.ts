@@ -5,6 +5,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.json';
 import it from './locales/it.json';
 import ko from './locales/ko.json';
+import zh from './locales/zh.json';
 
 /**
  * i18n configuration for Pingora Proxy Manager
@@ -23,10 +24,13 @@ i18n
       },
       ko: {
         translation: ko
+      },
+      zh: {
+        translation: zh
       }
     },
     fallbackLng: 'en',
-    supportedLngs: ['en', 'it', 'ko'],
+    supportedLngs: ['en', 'it', 'ko', 'zh'],
     
     // Language detection configuration
     detection: {

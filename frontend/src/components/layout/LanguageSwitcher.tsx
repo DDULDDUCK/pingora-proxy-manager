@@ -21,6 +21,7 @@ const SUPPORTED_LANGUAGES: readonly Language[] = [
   { code: 'en', name: 'English', flag: '🇬🇧', nativeName: 'English' },
   { code: 'it', name: 'Italian', flag: '🇮🇹', nativeName: 'Italiano' },
   { code: 'ko', name: 'Korean', flag: '🇰🇷', nativeName: '한국어' },
+  { code: 'zh', name: 'Chinese', flag: '🇨🇳', nativeName: '简体中文' },
 ] as const;
 
 /**
